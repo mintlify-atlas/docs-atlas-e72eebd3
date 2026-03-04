@@ -1,0 +1,275 @@
+---
+title: 'Google Meet Integration'
+description: 'Generate and manage Google Meet links for legal consultations'
+---
+
+# Google Meet Integration
+
+upLegal uses Google Meet for virtual legal consultations. This integration provides utilities for generating meeting links and scheduling events.
+
+## Overview
+
+The Google Meet integration is implemented as a lightweight utility library that generates properly formatted Google Meet URLs and calendar events without requiring OAuth or API keys.
+
+## Setup
+
+No environment variables or API keys are required. The integration uses public Google Calendar and Meet URLs.
+
+## Generating Meeting Links
+
+### Basic Meet Link
+
+Generate a simple Google Meet link:
+
+```typescript
+import { generateGoogleMeetLink } from '@/lib/googleMeet';
+
+// Generate a new meeting link
+const meetUrl = generateGoogleMeetLink();
+// Returns: https://meet.google.com/new
+```
+
+### Meeting with Calendar Event
+
+Create a meeting with a calendar invitation:
+
+```typescript
+import { generateGoogleMeetLink } from '@/lib/googleMeet';
+
+const meetUrl = generateGoogleMeetLink(
+  'Consulta Legal - Derecho Laboral',
+  new Date('2024-03-15T10:00:00'),
+  60 // duration in minutes
+);
+
+// Returns: https://calendar.google.com/calendar/render?action=TEMPLATE&text=...
+```
+
+This generates a Google Calendar link that:
+- Creates a calendar event with the specified title
+- Sets the correct start and end times
+- Includes a description
+- Automatically adds a Google Meet link to the event
+
+## Implementation
+
+### Full Source Code
+
+```typescript
+// src/lib/googleMeet.ts
+
+/**
+ * Genera un enlace de Google Meet para una reunión
+ * @param title Título de la reunión (opcional)
+ * @param date Fecha y hora de la reunión (opcional)
+ * @param duration Duración en minutos (opcional)
+ * @returns URL de la reunión de Google Meet
+ */
+export function generateGoogleMeetLink(
+  title: string = 'Reunión Legal',
+  date?: Date,
+  duration: number = 60
+): string {
+  // Base URL de Google Meet
+  let meetUrl = 'https://meet.google.com/new';
+  
+  // Si se proporciona una fecha, formatearla para el calendario
+  if (date) {
+    const startTime = date.toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+    const endTime = new Date(date.getTime() + duration * 60 * 1000)
+      .toISOString()
+      .replace(/[-:]/g, '')
+      .replace(/\.\d+Z$/, 'Z');
+    
+    // Crear enlace con parámetros de calendario
+    meetUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE` +
+      `&text=${encodeURIComponent(title)}` +
+      `&dates=${startTime}/${endTime}` +
+      `&details=${encodeURIComponent('Reunión programada a través de LegalUp')}` +
+      `&add=google.com`;
+  }
+  
+  return meetUrl;
+}
+
+/**
+ * Formatea un enlace de Google Meet para mostrarlo de manera más amigable
+ * @param url URL de Google Meet
+ * @returns URL formateada
+ */
+export function formatMeetLink(url: string): string {
+  const match = url.match(/meet\.google\.com\/([a-z]+-[a-z]+-[a-z]+)/i);
+  if (match && match[1]) {
+    return `meet.google.com/${match[1]}`;
+  }
+  return url;
+}
+
+/**
+ * Verifica si una URL es un enlace de Google Meet válido
+ * @param url URL a verificar
+ * @returns boolean
+ */
+export function isValidMeetUrl(url: string): boolean {
+  return /^https?:\/\/meet\.google\.com\/[a-z]+-[a-z]+-[a-z]+/i.test(url);
+}
+```
+
+## Usage Examples
+
+### In Appointment Scheduling
+
+Generate a Meet link when confirming a booking:
+
+```typescript
+import { generateGoogleMeetLink } from '@/lib/googleMeet';
+
+// When booking is confirmed
+const appointmentDate = new Date(`${booking.scheduled_date}T${booking.scheduled_time}`);
+const meetLink = generateGoogleMeetLink(
+  `Consulta Legal - ${lawyerName}`,
+  appointmentDate,
+  booking.duration
+);
+
+// Save to appointment record
+await supabase
+  .from('appointments')
+  .update({ meet_link: meetLink })
+  .eq('id', appointmentId);
+```
+
+### In Email Notifications
+
+Include the meeting link in confirmation emails:
+
+```typescript
+import { generateGoogleMeetLink, formatMeetLink } from '@/lib/googleMeet';
+
+const meetLink = generateGoogleMeetLink(
+  'Asesoría Legal',
+  appointmentDate,
+  60
+);
+
+await resend.emails.send({
+  from: 'LegalUp <hola@mg.legalup.cl>',
+  to: clientEmail,
+  subject: 'Enlace de tu consulta virtual',
+  html: `
+    <h1>Tu Consulta Virtual</h1>
+    <p>Fecha: ${formattedDate}</p>
+    <p>Hora: ${formattedTime}</p>
+    <a href="${meetLink}">Unirse a la reunión</a>
+    <p>O copia este enlace: ${formatMeetLink(meetLink)}</p>
+  `,
+});
+```
+
+### Displaying in UI
+
+Show formatted meeting links in the dashboard:
+
+```tsx
+import { formatMeetLink, isValidMeetUrl } from '@/lib/googleMeet';
+
+function AppointmentCard({ appointment }) {
+  return (
+    <div className="appointment-card">
+      <h3>{appointment.title}</h3>
+      <p>{appointment.date} at {appointment.time}</p>
+      
+      {isValidMeetUrl(appointment.meet_link) && (
+        <a 
+          href={appointment.meet_link}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="meet-link"
+        >
+          {formatMeetLink(appointment.meet_link)}
+        </a>
+      )}
+    </div>
+  );
+}
+```
+
+## Calendar Event Format
+
+The calendar link includes these parameters:
+
+- `action=TEMPLATE` - Creates a new calendar event
+- `text` - Event title (URL encoded)
+- `dates` - Start/end in ISO format (YYYYMMDDTHHmmssZ)
+- `details` - Event description
+- `add` - Adds Google Meet automatically
+
+## Validation
+
+Validate meeting URLs before saving:
+
+```typescript
+import { isValidMeetUrl } from '@/lib/googleMeet';
+
+function saveMeetingLink(url: string) {
+  if (!isValidMeetUrl(url)) {
+    throw new Error('Invalid Google Meet URL');
+  }
+  
+  // Save to database
+  return supabase
+    .from('appointments')
+    .update({ meet_link: url })
+    .eq('id', appointmentId);
+}
+```
+
+## Best Practices
+
+<Check>
+  - Generate links with calendar events for scheduled appointments
+  - Use `formatMeetLink()` for display to users
+  - Validate URLs with `isValidMeetUrl()` before saving
+  - Include meeting links in both confirmation and reminder emails
+  - Store the full URL in the database
+  - Test links before sending to clients
+</Check>
+
+## Time Zone Handling
+
+The calendar event uses ISO 8601 format with UTC times:
+
+```typescript
+// Convert local time to UTC for calendar event
+const appointmentDate = new Date(`${date}T${time}`);
+
+// The generateGoogleMeetLink function handles the conversion
+const meetLink = generateGoogleMeetLink(
+  'Consulta Legal',
+  appointmentDate,
+  duration
+);
+```
+
+Google Calendar will automatically convert to the user's local timezone.
+
+## Limitations
+
+<Warning>
+  - This integration doesn't create actual Google Meet rooms programmatically
+  - Users must have a Google account to create/join meetings
+  - Calendar events require user interaction to save
+  - For instant meetings, use `meet.google.com/new` which redirects to a new room
+</Warning>
+
+## Alternative: Direct Meet Links
+
+For instant consultations without scheduling:
+
+```typescript
+// Simple new meeting
+const instantMeetLink = 'https://meet.google.com/new';
+
+// User clicks this and Google creates a room immediately
+// They can then share the generated room code with the lawyer
+```

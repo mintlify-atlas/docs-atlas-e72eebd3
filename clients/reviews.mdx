@@ -1,0 +1,591 @@
+---
+title: Reviews and Ratings
+description: How clients leave reviews for lawyers and how the rating system works on upLegal
+---
+
+upLegal's review system helps clients make informed decisions by sharing experiences with lawyers. Only clients who've had consultations can leave reviews, ensuring authentic feedback.
+
+## Review System Overview
+
+The platform uses a **5-star rating system** with written reviews:
+
+- Star rating: 1-5 stars (required)
+- Written comment: Up to 1,000 characters (required)
+- Verification: Only after completed consultations
+- Moderation: Admin approval before publishing
+
+## Eligibility to Review
+
+Clients can only review lawyers they've actually worked with:
+
+```typescript
+// src/components/reviews/LawyerReviewsSection.tsx:93-133
+const checkIfCanReview = async () => {
+  if (!user) {
+    setCanWriteReview(false);
+    return;
+  }
+
+  try {
+    // Check if user has already reviewed
+    const existingReview = await ratingService.getUserRating(lawyerId, user.id);
+    if (existingReview) {
+      setCanWriteReview(false);
+      return;
+    }
+
+    // Check if user has had a consultation with this lawyer
+    const { data: consultations } = await supabase
+      .from('consultations')
+      .select('id')
+      .eq('client_id', user.id)
+      .eq('lawyer_id', lawyerId)
+      .eq('status', 'completed')
+      .limit(1);
+
+    const { data: appointments } = await supabase
+      .from('appointments')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('lawyer_id', lawyerId)
+      .eq('status', 'completed')
+      .limit(1);
+
+    setCanWriteReview(
+      (consultations && consultations.length > 0) || 
+      (appointments && appointments.length > 0)
+    );
+  } catch (error) {
+    console.error('Error checking review eligibility:', error);
+    setCanWriteReview(false);
+  }
+};
+```
+
+**Requirements**
+<Steps>
+  <Step title="Completed Consultation">
+    Client must have had at least one completed consultation or appointment with the lawyer.
+  </Step>
+  
+  <Step title="One Review Per Lawyer">
+    Clients can only submit one review per lawyer (cannot review the same lawyer multiple times).
+  </Step>
+  
+  <Step title="Authentication Required">
+    Must be logged in to write a review.
+  </Step>
+</Steps>
+
+<Warning>
+  Clients who've only messaged a lawyer but haven't had a consultation **cannot** leave a review.
+</Warning>
+
+## Writing a Review
+
+### Opening the Review Modal
+
+From a lawyer's profile page:
+
+<Steps>
+  <Step title="Scroll to Reviews Section">
+    Navigate to the "Reseñas y Calificaciones" section on the lawyer's profile.
+  </Step>
+  
+  <Step title="Check Eligibility">
+    If you're eligible, you'll see a "Escribir Reseña" button below the review statistics.
+    
+    If not eligible, you'll see:
+    - Disabled "Escribir Reseña" button
+    - Message: "Solo puedes reseñar abogados con los que has tenido consultas completadas"
+  </Step>
+  
+  <Step title="Click Write Review">
+    Click "Escribir Reseña" to open the review modal.
+  </Step>
+</Steps>
+
+### Review Form
+
+The modal contains two required fields:
+
+**1. Star Rating (Required)**
+
+<img src="/images/star-rating-selector.png" alt="Interactive 5-star rating selector" />
+
+```typescript
+// src/components/reviews/WriteReviewModal.tsx:28-29
+const [rating, setRating] = useState(0);
+const [hoveredRating, setHoveredRating] = useState(0);
+```
+
+- Interactive star selector with hover effects
+- Click a star to set rating (1-5)
+- Label updates based on rating:
+  - 5 stars: "Excelente"
+  - 4 stars: "Muy bueno"
+  - 3 stars: "Bueno"
+  - 2 stars: "Regular"
+  - 1 star: "Malo"
+
+**2. Written Comment (Required)**
+
+```typescript
+// src/components/reviews/WriteReviewModal.tsx:148-164
+<Textarea
+  id="comment"
+  placeholder="Cuéntanos sobre tu experiencia con este abogado. ¿Qué te pareció su atención, profesionalismo y resultados?"
+  value={comment}
+  onChange={(e) => setComment(e.target.value)}
+  rows={5}
+  className="resize-none"
+  maxLength={1000}
+/>
+<p className="text-xs text-gray-500 mt-1">
+  {comment.length}/1000 caracteres
+</p>
+```
+
+- Multi-line text area
+- 1,000 character limit
+- Character counter displayed
+- Placeholder with helpful prompt
+
+### Review Guidelines
+
+The modal displays guidelines to help clients write helpful reviews:
+
+```typescript
+// src/components/reviews/WriteReviewModal.tsx:167-177
+<div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+  <h4 className="text-sm font-medium text-blue-900 mb-2">
+    Pautas para reseñas
+  </h4>
+  <ul className="text-xs text-blue-800 space-y-1">
+    <li>• Sé honesto y específico sobre tu experiencia</li>
+    <li>• Evita lenguaje ofensivo o inapropiado</li>
+    <li>• No compartas información personal sensible</li>
+    <li>• Enfócate en el servicio profesional recibido</li>
+  </ul>
+</div>
+```
+
+<Info>
+  These guidelines help maintain review quality and protect both client and lawyer privacy.
+</Info>
+
+### Submitting the Review
+
+```typescript
+// src/components/reviews/WriteReviewModal.tsx:33-90
+const handleSubmit = async () => {
+  if (!user) {
+    toast({
+      title: 'Error',
+      description: 'Debes iniciar sesión para escribir una reseña',
+      variant: 'destructive'
+    });
+    return;
+  }
+
+  if (rating === 0) {
+    toast({
+      title: 'Calificación requerida',
+      description: 'Por favor selecciona una calificación',
+      variant: 'destructive'
+    });
+    return;
+  }
+
+  if (!comment.trim()) {
+    toast({
+      title: 'Comentario requerido',
+      description: 'Por favor escribe un comentario sobre tu experiencia',
+      variant: 'destructive'
+    });
+    return;
+  }
+
+  try {
+    setIsSubmitting(true);
+
+    await ratingService.createRating(
+      {
+        lawyerId: lawyerId,
+        rating,
+        comment: comment.trim()
+      },
+      user.id
+    );
+
+    toast({
+      title: '¡Reseña publicada!',
+      description: 'Gracias por compartir tu experiencia',
+    });
+
+    onSubmit();
+    handleClose();
+  } catch (error: any) {
+    console.error('Error submitting review:', error);
+    toast({
+      title: 'Error',
+      description: error.message || 'No se pudo publicar la reseña. Intenta nuevamente.',
+      variant: 'destructive'
+    });
+  } finally {
+    setIsSubmitting(false);
+  }
+};
+```
+
+**Validation Checks**
+1. User is authenticated
+2. Rating is selected (1-5)
+3. Comment is not empty
+4. Comment is trimmed of whitespace
+
+**On Success**
+- Success toast: "¡Reseña publicada!"
+- Modal closes
+- Review list refreshes
+- Button becomes disabled (can't review again)
+
+**On Error**
+- Error toast with specific message
+- Form stays open for retry
+- Submit button re-enabled
+
+## Review Moderation
+
+All reviews go through admin approval:
+
+```typescript
+// Reviews are created with status 'pending'
+const newReview = {
+  lawyer_id: lawyerId,
+  client_id: userId,
+  rating,
+  comment,
+  status: 'pending', // Not visible until approved
+  created_at: new Date()
+};
+```
+
+**Moderation Flow**
+
+<Steps>
+  <Step title="Submission">
+    Client submits review with status `pending`.
+  </Step>
+  
+  <Step title="Admin Review">
+    Admin reviews the submission in the admin dashboard:
+    - Checks for inappropriate language
+    - Verifies relevance
+    - Ensures compliance with guidelines
+  </Step>
+  
+  <Step title="Decision">
+    Admin can:
+    - **Approve**: Status changes to `approved`, review becomes visible
+    - **Reject**: Status changes to `rejected`, review hidden with reason
+    - **Request Edit**: Admin contacts client for modifications
+  </Step>
+  
+  <Step title="Notification">
+    Client receives email notification of approval/rejection.
+  </Step>
+</Steps>
+
+<Note>
+  Only reviews with status `approved` are displayed on lawyer profiles.
+</Note>
+
+## Viewing Reviews
+
+### Reviews Section Layout
+
+```typescript
+// src/components/reviews/LawyerReviewsSection.tsx:224-296
+<div id="reviews-section" className="bg-white rounded-lg border border-gray-200 p-6">
+  {/* Header */}
+  <div className="mb-6">
+    <h3 className="text-2xl font-semibold">Reseñas y Calificaciones</h3>
+    <p className="text-gray-600">Lo que dicen los clientes sobre este abogado</p>
+  </div>
+
+  {/* Rating Summary */}
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 pb-8 border-b">
+    {/* Average Rating */}
+    <div className="flex flex-col items-center justify-center text-center">
+      <div className="text-6xl font-bold">{ratingStats.average.toFixed(1)}</div>
+      <RatingStars rating={ratingStats.average} size="lg" />
+      <p className="text-gray-600">
+        Basado en {ratingStats.count} reseña{ratingStats.count !== 1 ? 's' : ''}
+      </p>
+    </div>
+
+    {/* Rating Distribution */}
+    <div className="space-y-2">
+      {[5, 4, 3, 2, 1].map(rating => {
+        const count = ratingDistribution[rating] || 0;
+        const percentage = ratingStats.count > 0 
+          ? (count / ratingStats.count) * 100 
+          : 0;
+
+        return (
+          <div key={rating} className="flex items-center gap-3">
+            <span className="text-sm font-medium w-4">{rating}</span>
+            <RatingStars rating={1} maxRating={1} size="sm" />
+            <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-yellow-400 transition-all duration-300"
+                style={{ width: `${percentage}%` }}
+              />
+            </div>
+            <span className="text-sm text-gray-600 w-8 text-right">{count}</span>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+  
+  {/* Reviews List */}
+  <div className="space-y-6 mb-6">
+    {displayedReviews.map(review => (
+      <ReviewCard key={review.id} review={review} />
+    ))}
+  </div>
+</div>
+```
+
+**Two-Column Layout**
+
+**Left Column: Average Rating**
+- Large number displaying average (e.g., "4.8")
+- Visual star rating
+- Total review count
+
+**Right Column: Rating Distribution**
+- Horizontal bar chart for each star level (5 down to 1)
+- Shows percentage and count for each rating
+- Yellow progress bars
+
+### Individual Review Cards
+
+Each review displays:
+
+```typescript
+// src/components/reviews/ReviewCard.tsx (simplified)
+<div className="border-b pb-6 last:border-0">
+  <div className="flex items-start gap-4">
+    {/* Avatar */}
+    <img src={review.user.avatar_url} className="h-10 w-10 rounded-full" />
+    
+    {/* Content */}
+    <div className="flex-1">
+      <div className="flex justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="font-medium">{review.user.display_name}</span>
+            <Badge variant="secondary">Cliente Verificado</Badge>
+          </div>
+          <div className="text-sm text-gray-500">
+            {formatDistanceToNow(review.created_at, { addSuffix: true, locale: es })}
+          </div>
+        </div>
+        <div>
+          <RatingStars rating={review.rating} size="sm" />
+        </div>
+      </div>
+      <p className="mt-2 text-gray-700">{review.comment}</p>
+    </div>
+  </div>
+</div>
+```
+
+**Components**
+- Client avatar (or default placeholder)
+- Client name (or "Usuario" if not set)
+- "Cliente Verificado" badge
+- Time since posted (e.g., "hace 2 semanas")
+- Star rating (visual)
+- Written comment
+
+### Show More Reviews
+
+If there are more than 3 reviews:
+
+```typescript
+// src/components/reviews/LawyerReviewsSection.tsx:141-142
+const displayedReviews = showAllReviews ? reviews : reviews.slice(0, 3);
+const hasMoreReviews = reviews.length > 3;
+```
+
+- Initially shows 3 reviews
+- "Ver Todas las Reseñas (X más)" button appears
+- Clicking expands to show all reviews
+
+## Rating Statistics
+
+The system calculates and displays:
+
+```typescript
+// src/components/reviews/LawyerReviewsSection.tsx:67-84
+if (reviewsData && reviewsData.length > 0) {
+  const totalRating = reviewsData.reduce((sum, review) => sum + review.rating, 0);
+  const averageRating = totalRating / reviewsData.length;
+  
+  setRatingStats({
+    average: parseFloat(averageRating.toFixed(1)),
+    count: reviewsData.length
+  });
+
+  // Calculate distribution
+  const distribution: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  reviewsData.forEach(review => {
+    distribution[review.rating] = (distribution[review.rating] || 0) + 1;
+  });
+  setRatingDistribution(distribution);
+}
+```
+
+**Calculated Metrics**
+- **Average Rating**: Mean of all approved reviews (to 1 decimal place)
+- **Total Count**: Number of approved reviews
+- **Distribution**: Count of reviews at each star level (1-5)
+
+<Info>
+  Only **approved** reviews are included in these calculations. Pending or rejected reviews don't affect the lawyer's rating.
+</Info>
+
+## Empty States
+
+### No Reviews Yet
+
+```typescript
+// src/components/reviews/LawyerReviewsSection.tsx:286-295
+{reviews.length > 0 ? (
+  // ... reviews list
+) : (
+  <div className="text-center py-12">
+    <p className="text-gray-500">
+      Aún no hay reseñas para este abogado.
+    </p>
+    {canWriteReview && (
+      <p className="text-gray-600 mt-2">¡Sé el primero en dejar una reseña!</p>
+    )}
+  </div>
+)}
+```
+
+When a lawyer has no reviews:
+- Message: "Aún no hay reseñas para este abogado."
+- If eligible: "¡Sé el primero en dejar una reseña!"
+- "Escribir Reseña" button still visible
+
+## Review Impact
+
+Reviews influence lawyer visibility:
+
+1. **Search Ranking**: Higher-rated lawyers appear first
+2. **Profile Badge**: Lawyers with 4.5+ average get "Highly Rated" badge
+3. **Trust Indicator**: More reviews = more credibility
+4. **Filter**: Clients can filter by minimum rating
+
+## Loading States
+
+While reviews are loading:
+
+```typescript
+// src/components/reviews/LawyerReviewsSection.tsx:144-221
+if (isLoading) {
+  return (
+    <div className="bg-white rounded-lg border p-6">
+      {/* Header Skeleton */}
+      <div className="h-7 w-64 bg-gray-200 rounded mb-2 animate-pulse" />
+      
+      {/* Rating Summary Skeleton */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        {/* Average rating skeleton */}
+        {/* Distribution skeleton */}
+      </div>
+      
+      {/* Review Cards Skeleton */}
+      {[1, 2, 3].map(i => (
+        <div key={i} className="border-b pb-6">
+          {/* Avatar, name, stars, comment skeletons */}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+- Skeleton screens match final layout
+- Pulsing animation effect
+- 3 review card placeholders
+- Smooth transition when data loads
+
+## Future Enhancements
+
+<CardGroup cols={3}>
+  <Card title="Reply to Reviews" icon="reply">
+    Lawyers can respond to reviews publicly
+  </Card>
+  
+  <Card title="Helpful Votes" icon="thumbs-up">
+    Other clients can mark reviews as helpful
+  </Card>
+  
+  <Card title="Photo Uploads" icon="image">
+    Clients can attach photos to reviews
+  </Card>
+  
+  <Card title="Review Reminders" icon="bell">
+    Email reminders to leave reviews after consultations
+  </Card>
+  
+  <Card title="Verified Purchase Badge" icon="badge-check">
+    Extra verification for paid consultations
+  </Card>
+  
+  <Card title="Review Analytics" icon="chart-bar">
+    Lawyers see detailed review insights in dashboard
+  </Card>
+</CardGroup>
+
+## Best Practices
+
+<Tip>
+  **Writing Effective Reviews:**
+  - Be specific about what the lawyer did well or poorly
+  - Mention the type of legal issue (without revealing sensitive details)
+  - Describe the outcome and professionalism
+  - Avoid emotional language; stay factual
+  - Help other clients make informed decisions
+</Tip>
+
+<Warning>
+  Do not include:
+  - Personal contact information (phone, email, address)
+  - Specific case details that could identify you
+  - Offensive or defamatory language
+  - References to ongoing litigation
+  - Requests for other clients to contact you
+</Warning>
+
+## Review Disputes
+
+If a lawyer believes a review is unfair:
+
+1. Lawyer contacts support via dashboard
+2. Support team reviews the dispute
+3. If valid concerns:
+   - Review may be edited or removed
+   - Client may be contacted for clarification
+4. Decision communicated within 3-5 business days
+
+<Note>
+  upLegal aims to maintain authentic reviews while protecting both parties from abuse. Genuine negative reviews are not removed simply because a lawyer disagrees.
+</Note>

@@ -1,0 +1,344 @@
+---
+title: Appointments & Bookings
+description: Appointment and booking management API
+icon: calendar
+---
+
+# Appointments & Bookings API
+
+Manage legal consultation bookings and appointments in upLegal.
+
+## Create Booking
+
+**Endpoint:** `POST /api/bookings/create`
+
+**Authentication:** Not required (public endpoint for guest bookings)
+
+Creates a new booking and generates a MercadoPago payment link.
+
+### Request Body
+
+<ParamField path="lawyer_id" type="string" required>
+  Lawyer's user ID
+</ParamField>
+
+<ParamField path="user_email" type="string" required>
+  Client's email address
+</ParamField>
+
+<ParamField path="user_name" type="string" required>
+  Client's full name
+</ParamField>
+
+<ParamField path="scheduled_date" type="string" required>
+  Appointment date (YYYY-MM-DD format)
+</ParamField>
+
+<ParamField path="scheduled_time" type="string" required>
+  Appointment time (HH:MM format, 24-hour)
+</ParamField>
+
+<ParamField path="duration" type="number" required>
+  Duration in minutes (30, 60, 90, or 120)
+</ParamField>
+
+<ParamField path="price" type="number" required>
+  Price in CLP (minimum 1000)
+</ParamField>
+
+### Example Request
+
+```json
+{
+  "lawyer_id": "550e8400-e29b-41d4-a716-446655440000",
+  "user_email": "cliente@example.com",
+  "user_name": "Carlos Rodríguez",
+  "scheduled_date": "2026-03-15",
+  "scheduled_time": "14:30",
+  "duration": 60,
+  "price": 30000
+}
+```
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Operation success status
+</ResponseField>
+
+<ResponseField name="booking_id" type="string">
+  Created booking ID (UUID)
+</ResponseField>
+
+<ResponseField name="payment_link" type="string">
+  MercadoPago checkout URL
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Success message
+</ResponseField>
+
+### Example Response
+
+```json 200 - Success
+{
+  "success": true,
+  "booking_id": "abc123def-4567-89ab-cdef-0123456789ab",
+  "payment_link": "https://www.mercadopago.cl/checkout/v1/redirect?pref_id=123456789-abc123",
+  "message": "Booking created successfully"
+}
+```
+
+### Error Responses
+
+```json 400 - Missing Fields
+{
+  "error": "Missing required fields",
+  "required": [
+    "lawyer_id",
+    "user_email",
+    "user_name",
+    "scheduled_date",
+    "scheduled_time",
+    "duration",
+    "price"
+  ]
+}
+```
+
+```json 400 - Invalid Duration
+{
+  "error": "Duration must be 30, 60, 90 or 120 minutes"
+}
+```
+
+```json 400 - Invalid Email
+{
+  "error": "Invalid email format"
+}
+```
+
+```json 404 - Lawyer Not Found
+{
+  "error": "Lawyer not found"
+}
+```
+
+```json 409 - Time Slot Taken
+{
+  "error": "Time slot not available",
+  "message": "Este horario ya está reservado. Por favor elige otro."
+}
+```
+
+## Get Booking
+
+**Endpoint:** `GET /api/bookings/:bookingId`
+
+**Authentication:** Not required (public endpoint)
+
+Retrieve booking details by ID.
+
+### Path Parameters
+
+<ParamField path="bookingId" type="string" required>
+  Booking ID (UUID)
+</ParamField>
+
+### Response
+
+<ResponseField name="booking" type="object">
+  Booking details
+  
+  <ResponseField name="id" type="string">
+    Booking ID
+  </ResponseField>
+  
+  <ResponseField name="lawyer_id" type="string">
+    Lawyer's user ID
+  </ResponseField>
+  
+  <ResponseField name="user_id" type="string | null">
+    Client's user ID (null for guest bookings until payment)
+  </ResponseField>
+  
+  <ResponseField name="user_email" type="string">
+    Client email
+  </ResponseField>
+  
+  <ResponseField name="user_name" type="string">
+    Client name
+  </ResponseField>
+  
+  <ResponseField name="scheduled_date" type="string">
+    Appointment date (YYYY-MM-DD)
+  </ResponseField>
+  
+  <ResponseField name="scheduled_time" type="string">
+    Appointment time (HH:MM)
+  </ResponseField>
+  
+  <ResponseField name="duration" type="number">
+    Duration in minutes
+  </ResponseField>
+  
+  <ResponseField name="price" type="number">
+    Price in CLP
+  </ResponseField>
+  
+  <ResponseField name="status" type="string">
+    Booking status: `pending`, `confirmed`, or `cancelled`
+  </ResponseField>
+  
+  <ResponseField name="payment_id" type="string | null">
+    MercadoPago payment ID
+  </ResponseField>
+  
+  <ResponseField name="mercadopago_preference_id" type="string | null">
+    MercadoPago preference ID
+  </ResponseField>
+  
+  <ResponseField name="confirmed_at" type="string | null">
+    Confirmation timestamp (ISO 8601)
+  </ResponseField>
+  
+  <ResponseField name="cancelled_at" type="string | null">
+    Cancellation timestamp (ISO 8601)
+  </ResponseField>
+  
+  <ResponseField name="created_at" type="string">
+    Creation timestamp (ISO 8601)
+  </ResponseField>
+  
+  <ResponseField name="updated_at" type="string">
+    Last update timestamp (ISO 8601)
+  </ResponseField>
+  
+  <ResponseField name="lawyer" type="object">
+    Lawyer information
+    
+    <ResponseField name="user_id" type="string">
+      Lawyer's user ID
+    </ResponseField>
+    
+    <ResponseField name="first_name" type="string">
+      First name
+    </ResponseField>
+    
+    <ResponseField name="last_name" type="string">
+      Last name
+    </ResponseField>
+    
+    <ResponseField name="specialties" type="array">
+      Array of specialties
+    </ResponseField>
+    
+    <ResponseField name="profile_picture_url" type="string | null">
+      Profile picture URL
+    </ResponseField>
+  </ResponseField>
+</ResponseField>
+
+### Example Response
+
+```json 200 - Success
+{
+  "booking": {
+    "id": "abc123def-4567-89ab-cdef-0123456789ab",
+    "lawyer_id": "550e8400-e29b-41d4-a716-446655440000",
+    "user_id": null,
+    "user_email": "cliente@example.com",
+    "user_name": "Carlos Rodríguez",
+    "scheduled_date": "2026-03-15",
+    "scheduled_time": "14:30",
+    "duration": 60,
+    "price": 30000,
+    "status": "pending",
+    "payment_id": null,
+    "mercadopago_preference_id": "123456789-abc123",
+    "confirmed_at": null,
+    "cancelled_at": null,
+    "created_at": "2026-03-04T10:00:00.000Z",
+    "updated_at": "2026-03-04T10:00:00.000Z",
+    "lawyer": {
+      "user_id": "550e8400-e29b-41d4-a716-446655440000",
+      "first_name": "María",
+      "last_name": "González",
+      "specialties": ["Derecho Civil", "Derecho de Familia"],
+      "profile_picture_url": "https://example.com/avatar.jpg"
+    }
+  }
+}
+```
+
+```json 404 - Not Found
+{
+  "error": "Booking not found"
+}
+```
+
+## Booking Workflow
+
+1. **Client creates booking** via `POST /api/bookings/create`
+2. **System checks availability** and prevents double-booking
+3. **MercadoPago preference created** with payment details
+4. **Client redirected to payment** using the `payment_link`
+5. **Payment processed** by MercadoPago
+6. **Webhook notification** confirms payment (see [Payments API](/api/payments))
+7. **Booking confirmed** and appointment created
+8. **Email notifications sent** to both client and lawyer
+9. **User account created** for guest bookings (if not exists)
+
+## Booking States
+
+| Status | Description |
+|--------|-------------|
+| `pending` | Created, awaiting payment |
+| `confirmed` | Payment successful, appointment scheduled |
+| `cancelled` | Booking cancelled |
+
+## Double-Booking Prevention
+
+The system automatically checks for overlapping bookings:
+
+- Same lawyer
+- Same date
+- Overlapping time slots
+- Only checks `pending` and `confirmed` bookings
+
+Time slot calculation includes buffer for appointment duration.
+
+## Email Notifications
+
+### Client Confirmation Email
+
+- Sent to `user_email` after payment confirmation
+- Includes appointment details
+- Contains magic link for account access
+- Sent from: `LegalUp <hola@mg.legalup.cl>`
+
+### Lawyer Notification Email
+
+- Sent to lawyer's registered email
+- Includes client details and appointment info
+- Link to dashboard
+- Sent from: `LegalUp <hola@mg.legalup.cl>`
+
+## Auto-Created Appointments
+
+After successful payment, the system automatically creates an `appointments` record:
+
+- Links to the booking via `booking_id`
+- Status set to `confirmed`
+- Consultation type: `paid`
+- Contact method: `platform`
+- Visible in lawyer dashboard
+
+## RLS Policies
+
+### Bookings Table
+
+- **SELECT**: Public read for booking details by ID
+- **INSERT**: Service role only (via API endpoint)
+- **UPDATE**: Service role only (via webhook)
+- **DELETE**: Not allowed

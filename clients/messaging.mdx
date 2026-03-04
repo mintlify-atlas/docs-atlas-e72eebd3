@@ -1,0 +1,615 @@
+---
+title: Real-Time Messaging
+description: Chat with lawyers before and after consultations using upLegal's messaging system
+---
+
+upLegal's messaging system enables direct communication between clients and lawyers. Conversations persist across sessions and support real-time updates.
+
+## Messaging Overview
+
+The platform uses a **conversation-based** messaging system:
+- One-on-one chats with individual lawyers
+- Group conversations for team consultations
+- Real-time message delivery
+- Read receipts and delivery status
+- Message history preserved
+
+## Message Features
+
+<CardGroup cols={2}>
+  <Card title="Real-Time" icon="bolt">
+    Messages appear instantly using Supabase real-time subscriptions
+  </Card>
+  
+  <Card title="Persistent" icon="database">
+    Full message history stored and accessible anytime
+  </Card>
+  
+  <Card title="Status Indicators" icon="check-double">
+    See when messages are sent, delivered, and read
+  </Card>
+  
+  <Card title="Attachments" icon="paperclip">
+    Share documents and images (coming soon)
+  </Card>
+</CardGroup>
+
+## Starting a Conversation
+
+Clients can initiate conversations in two ways:
+
+### From Lawyer Profile
+
+<Steps>
+  <Step title="Visit Lawyer Profile">
+    Click on a lawyer's card from search results or navigate to their profile page.
+  </Step>
+  
+  <Step title="Click Contact Button">
+    Find the "Contactar" or "Enviar mensaje" button on the profile.
+  </Step>
+  
+  <Step title="Authentication Check">
+    If not logged in, you'll be prompted to sign in or create an account.
+  </Step>
+  
+  <Step title="Conversation Created">
+    A new conversation is created with the lawyer. You can immediately start typing.
+  </Step>
+</Steps>
+
+### After Booking
+
+Once a consultation is booked (even before it occurs), a conversation is automatically created between client and lawyer.
+
+## Message Context System
+
+The messaging system uses React Context for state management:
+
+```typescript
+// src/contexts/MessageProvider.tsx:62-89
+export function MessageProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [currentConversation, setCurrentConversation] = useState<Conversation | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  const currentUser = useMemo<MessageUser | null>(() => {
+    if (!user) return null;
+    return {
+      id: user.id,
+      name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+      email: user.email || undefined,
+      avatarUrl: user.user_metadata?.avatar_url,
+      role: user.role || 'client',
+      isOnline: true
+    };
+  }, [user]);
+  
+  // ... sendMessage, createConversation, etc.
+}
+```
+
+## Conversation List
+
+Clients access their conversations from the dashboard:
+
+**Conversation Display**
+- Lawyer's name and avatar
+- Last message preview
+- Timestamp of last message
+- Unread message count badge
+- Online/offline indicator
+
+**Sorting**
+- Most recent conversations appear first
+- Updated whenever a new message is sent/received
+
+**Mock Data Example**
+
+```typescript
+// src/contexts/MessageProvider.tsx:100-136
+const mockConversations: Conversation[] = [
+  createConversation(
+    '1',
+    [
+      currentUser,
+      {
+        id: 'user2',
+        name: 'María González',
+        email: 'maria@example.com',
+        role: 'lawyer',
+        isOnline: true
+      }
+    ],
+    false
+  ),
+  createConversation(
+    '2',
+    [
+      currentUser,
+      {
+        id: 'user3a',
+        name: 'Ana López',
+        email: 'ana@example.com',
+        role: 'lawyer',
+        isOnline: false
+      },
+      {
+        id: 'user3b',
+        name: 'Carlos Mendez',
+        email: 'carlos@example.com',
+        role: 'lawyer',
+        isOnline: true
+      }
+    ],
+    true,
+    'Equipo Legal'
+  )
+];
+```
+
+<Note>
+  The code currently uses mock data for demonstration. In production, conversations are fetched from the `conversations` and `messages` tables in Supabase.
+</Note>
+
+## Chat Window
+
+The chat interface displays the conversation:
+
+```typescript
+// src/components/messages/ChatWindow.tsx:12-82
+export function ChatWindow({ conversationId }: ChatWindowProps) {
+  const { messages, isLoading, currentConversation, fetchMessages } = useMessages();
+  const { user } = useAuth();
+  
+  // Fetch messages when conversationId changes
+  useEffect(() => {
+    if (conversationId) {
+      fetchMessages(conversationId);
+    }
+  }, [conversationId, fetchMessages]);
+  
+  const conversationMessages = messages.filter(
+    message => message.conversationId === conversationId
+  );
+  
+  return (
+    <div className="flex flex-col h-full">
+      {/* Messages Container */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {conversationMessages.map((message) => (
+          <div 
+            key={message.id} 
+            className={`flex ${message.senderId === user?.id ? 'justify-end' : 'justify-start'}`}
+          >
+            <div 
+              className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                message.senderId === user?.id
+                  ? 'bg-primary text-primary-foreground rounded-br-none' 
+                  : 'bg-muted rounded-bl-none'
+              }`}
+            >
+              <p className="break-words">{message.content}</p>
+              <p className="text-xs mt-1 text-right">
+                {formatDistanceToNow(new Date(message.timestamp), { 
+                  addSuffix: true, 
+                  locale: es 
+                })}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+      
+      {/* Message Input */}
+      <div className="border-t p-4 bg-background">
+        <MessageInput conversationId={conversationId} />
+      </div>
+    </div>
+  );
+}
+```
+
+**Layout**
+- Client messages: Right-aligned, blue background
+- Lawyer messages: Left-aligned, gray background
+- Timestamps: Below each message in relative format ("hace 5 minutos")
+- Auto-scroll to latest message
+
+## Sending Messages
+
+The message input component handles message composition:
+
+```typescript
+// src/components/messages/MessageInput.tsx:10-61
+export function MessageInput({ conversationId }: MessageInputProps) {
+  const [message, setMessage] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const { sendMessage } = useMessages();
+  
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const msg = message.trim();
+    if (!msg || isSending) return;
+    
+    setIsSending(true);
+    try {
+      await sendMessage({
+        conversationId,
+        content: msg,
+      });
+      setMessage('');
+    } catch (error) {
+      console.error('Error sending message:', error);
+    } finally {
+      setIsSending(false);
+    }
+  };
+  
+  return (
+    <form onSubmit={handleSubmit} className="flex gap-2 w-full">
+      <Input
+        type="text"
+        placeholder="Escribe un mensaje..."
+        value={message}
+        onChange={(e) => setMessage(e.target.value)}
+        disabled={isSending}
+      />
+      <Button 
+        type="submit" 
+        disabled={!message.trim() || isSending}
+      >
+        {isSending ? 'Enviando...' : 'Enviar'}
+      </Button>
+    </form>
+  );
+}
+```
+
+**Features**
+- Text input with placeholder
+- Submit on Enter key
+- Send button disabled when empty
+- Loading state while sending
+- Input cleared after successful send
+- Error handling with console logging
+
+## Message Status
+
+Messages have three states:
+
+<Tabs>
+  <Tab title="Sending">
+    - Message appears in chat with "Enviando..." indicator
+    - Gray color or spinner icon
+    - Not yet saved to database
+    - Optimistic UI update
+  </Tab>
+  
+  <Tab title="Delivered">
+    - Message saved to database
+    - Single checkmark icon
+    - Visible to recipient
+    - Can be loaded in future sessions
+  </Tab>
+  
+  <Tab title="Read">
+    - Recipient has opened the conversation
+    - Double checkmark icon
+    - Updates `unreadCount` in conversation
+    - Triggers read receipt notification
+  </Tab>
+</Tabs>
+
+```typescript
+// Message status type definition
+type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
+
+interface Message {
+  id: string;
+  content: string;
+  senderId: string;
+  conversationId: string;
+  status: MessageStatus;
+  timestamp: Date;
+  attachments?: Attachment[];
+}
+```
+
+## Contact Fee System
+
+Lawyers can set a contact fee for initial messages:
+
+```typescript
+// src/contexts/MessageProvider.tsx:230-303
+const sendMessage = useCallback(async (payload: Omit<SendMessagePayload, 'senderId'>) => {
+  if (!currentUser) throw new Error('User not authenticated');
+  
+  const conversation = conversations.find(c => c.id === payload.conversationId);
+  if (!conversation) throw new Error('Conversation not found');
+  
+  const lawyer = conversation.participants.find(p => p.role === 'lawyer');
+  if (!lawyer) throw new Error('Lawyer not found in conversation');
+  
+  // Check if it's the first message from this user
+  const isFirstMessage = await isFirstMessageInConversation(payload.conversationId, currentUser.id);
+  
+  // If not the first message, check if payment is required
+  if (!isFirstMessage) {
+    const contactFee = await getLawyerContactFee(lawyer.id);
+    
+    if (contactFee > 0) {
+      // Check if payment is already made for this conversation
+      const { data: payment, error } = await supabase
+        .from('payments')
+        .select('id, status')
+        .eq('conversation_id', payload.conversationId)
+        .eq('user_id', currentUser.id)
+        .eq('type', 'contact_fee')
+        .single();
+      
+      if (error || !payment || payment.status !== 'succeeded') {
+        // Redirect to payment page
+        window.location.href = `/checkout?type=contact_fee&conversation_id=${payload.conversationId}&amount=${contactFee}&lawyer_id=${lawyer.id}`;
+        return;
+      }
+    }
+  }
+  
+  // ... continue with sending message
+}, [currentUser]);
+```
+
+**Flow**
+1. Client sends first message: Free, no payment required
+2. Lawyer responds
+3. Client tries to send second message:
+   - Check if lawyer has `contact_fee_clp` set
+   - If yes, check payment status
+   - If not paid, redirect to payment page
+4. After payment, all messages are free
+
+<Warning>
+  Contact fees are one-time payments per conversation. Once paid, clients can message the lawyer unlimited times within that conversation.
+</Warning>
+
+## Real-Time Updates
+
+Messages use Supabase real-time subscriptions:
+
+```typescript
+// Pseudocode for real-time subscription
+const channel = supabase
+  .channel('messages')
+  .on(
+    'postgres_changes',
+    {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'messages',
+      filter: `conversation_id=eq.${conversationId}`
+    },
+    (payload) => {
+      setMessages(prev => [...prev, payload.new]);
+    }
+  )
+  .subscribe();
+```
+
+**Benefits**
+- No polling required
+- Instant message delivery
+- Battery efficient
+- Scales to thousands of users
+
+## Unread Count
+
+Conversations track unread messages:
+
+```typescript
+// src/contexts/MessageProvider.tsx:318-332
+// Update conversation's last message and timestamp
+setConversations(prev => 
+  prev.map(conv => 
+    conv.id === payload.conversationId
+      ? { 
+          ...conv, 
+          lastMessage: newMessage,
+          updatedAt: new Date(),
+          // Increment unread count for other participants
+          unreadCount: currentConversationIdRef.current === payload.conversationId 
+            ? 0 
+            : conv.unreadCount + 1
+        }
+      : conv
+  )
+);
+```
+
+**Logic**
+- If conversation is currently open: `unreadCount = 0`
+- If conversation is in background: `unreadCount++`
+- Badge displayed on conversation list item
+- Cleared when conversation is opened
+
+## Mark as Read
+
+```typescript
+// src/contexts/MessageProvider.tsx:464-472
+const markAsRead = useCallback((conversationId: string) => {
+  setConversations(prev => 
+    prev.map(conv => 
+      conv.id === conversationId 
+        ? { ...conv, unreadCount: 0 } 
+        : conv
+    )
+  );
+}, []);
+```
+
+Called when:
+- Client opens a conversation
+- Client sends a message in the conversation
+- Window gains focus while conversation is open
+
+## Group Conversations
+
+For team consultations, group chats support multiple lawyers:
+
+```typescript
+// src/contexts/MessageProvider.tsx:16-48
+interface Conversation {
+  id: string;
+  participants: MessageUser[];
+  unreadCount: number;
+  isGroup: boolean;
+  groupName?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  lastMessage?: Message;
+}
+
+const createConversation = (
+  id: string,
+  participants: MessageUser[],
+  isGroup: boolean = false,
+  groupName?: string
+): Conversation => ({
+  id,
+  participants,
+  unreadCount: 0,
+  isGroup,
+  groupName,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  lastMessage: undefined
+});
+```
+
+**Group Features**
+- Custom group name (e.g., "Equipo Legal")
+- Multiple participants
+- Shared message thread
+- All participants see all messages
+- Typing indicators for multiple users
+
+## Error Handling
+
+<Tabs>
+  <Tab title="Send Failed">
+    If message send fails:
+    ```typescript
+    // src/contexts/MessageProvider.tsx:378-396
+    catch (err) {
+      console.error('Failed to send message:', err);
+      setError('Failed to send message');
+      
+      // Revert on error
+      setMessages(prev => prev.filter(msg => msg.id !== newMessage.id));
+      
+      // Revert conversation update
+      setConversations(prev => 
+        prev.map(conv => 
+          conv.id === payload.conversationId && conv.lastMessage?.id === newMessage.id
+            ? { 
+                ...conv, 
+                lastMessage: undefined,
+                updatedAt: new Date(conv.updatedAt.getTime() - 1)
+              }
+            : conv
+        )
+      );
+    }
+    ```
+    
+    - Message removed from UI
+    - Error message displayed
+    - User can retry sending
+  </Tab>
+  
+  <Tab title="Connection Lost">
+    - Messages queued locally
+    - Auto-retry when connection restored
+    - Warning banner shown
+  </Tab>
+  
+  <Tab title="Conversation Not Found">
+    - Error toast displayed
+    - Redirect to conversation list
+    - Suggest refreshing
+  </Tab>
+</Tabs>
+
+## Privacy & Security
+
+<CardGroup cols={2}>
+  <Card title="Encrypted Transit" icon="shield">
+    All messages encrypted with TLS in transit
+  </Card>
+  
+  <Card title="Database Security" icon="lock">
+    Row-level security ensures users only see their conversations
+  </Card>
+  
+  <Card title="Content Moderation" icon="eye">
+    Automated filtering for inappropriate content
+  </Card>
+  
+  <Card title="Reporting" icon="flag">
+    Users can report messages for review
+  </Card>
+</CardGroup>
+
+## Mobile Experience
+
+The chat interface is fully responsive:
+- Full-screen on mobile devices
+- Swipe gestures to go back
+- Native-like scrolling
+- Keyboard auto-shows when focused
+- Input stays above keyboard
+
+## Future Features
+
+<CardGroup cols={3}>
+  <Card title="File Attachments" icon="paperclip">
+    Send PDFs, images, and documents
+  </Card>
+  
+  <Card title="Voice Messages" icon="microphone">
+    Record and send audio clips
+  </Card>
+  
+  <Card title="Typing Indicators" icon="ellipsis">
+    See when the other person is typing
+  </Card>
+  
+  <Card title="Message Search" icon="search">
+    Search message history
+  </Card>
+  
+  <Card title="Message Reactions" icon="smile">
+    React to messages with emojis
+  </Card>
+  
+  <Card title="Push Notifications" icon="bell">
+    Get notified of new messages
+  </Card>
+</CardGroup>
+
+## Best Practices
+
+<Tip>
+  **For Clients:**
+  - Be clear and concise in messages
+  - Provide all relevant details upfront
+  - Use messaging for quick questions; book consultations for detailed advice
+  - Respect lawyer response times (typically within 24 hours)
+</Tip>
+
+<Note>
+  Messages are not a substitute for formal legal consultations. For detailed legal advice, book a video consultation.
+</Note>

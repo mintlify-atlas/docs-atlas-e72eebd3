@@ -1,0 +1,418 @@
+---
+title: 'Ratings and Reviews System'
+description: 'Comprehensive review system with ratings, comments, and verification'
+icon: 'star'
+---
+
+## Overview
+
+upLegal's ratings and reviews system enables clients to share their experiences with lawyers, helping other users make informed decisions. The system includes star ratings, detailed reviews, verification badges, and moderation workflows.
+
+## Review Structure
+
+```typescript
+interface Rating {
+  id: string;
+  lawyer_id: string;
+  user_id: string;
+  rating: number;           // 1-5 stars
+  comment: string | null;
+  created_at: string;
+  updated_at?: string;
+  user: {
+    id: string;
+    display_name: string;
+    avatar_url?: string;
+  };
+  service_type?: string;
+  helpful_count?: number;
+}
+```
+
+## Star Rating System
+
+Reviews use a 5-star rating scale:
+
+<CardGroup cols={5}>
+  <Card title="1 Star" icon="star">
+    Malo
+  </Card>
+  <Card title="2 Stars" icon="star">
+    Regular
+  </Card>
+  <Card title="3 Stars" icon="star">
+    Bueno
+  </Card>
+  <Card title="4 Stars" icon="star">
+    Muy bueno
+  </Card>
+  <Card title="5 Stars" icon="star">
+    Excelente
+  </Card>
+</CardGroup>
+
+### Visual Rating Display
+
+Ratings are displayed as filled/unfilled stars:
+
+- **Filled Star**: ⭐ (for whole numbers)
+- **Half Star**: ⭐ (for decimals .5 and above)
+- **Empty Star**: ☆ (for remaining stars)
+
+## Writing a Review
+
+### Eligibility Requirements
+
+Clients can only review lawyers if they have:
+
+1. **Completed Consultation**: At least one finished appointment
+2. **No Existing Review**: Haven't already reviewed this lawyer
+3. **Active Account**: Must be logged in with verified account
+
+```typescript
+// Eligibility check
+const checkIfCanReview = async (lawyerId: string, userId: string) => {
+  // 1. Check for existing review
+  const existingReview = await ratingService.getUserRating(lawyerId, userId);
+  if (existingReview) return false;
+  
+  // 2. Check for completed consultations or appointments
+  const consultations = await supabase
+    .from('consultations')
+    .select('id')
+    .eq('client_id', userId)
+    .eq('lawyer_id', lawyerId)
+    .eq('status', 'completed');
+    
+  const appointments = await supabase
+    .from('appointments')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('lawyer_id', lawyerId)
+    .eq('status', 'completed');
+    
+  return (consultations?.length > 0) || (appointments?.length > 0);
+};
+```
+
+<Note>
+This verification ensures all reviews are from actual clients who have received legal services from the lawyer.
+</Note>
+
+### Review Form
+
+The review submission form includes:
+
+#### 1. Star Rating (Required)
+
+Interactive star selector:
+
+- Hover to preview rating
+- Click to set rating
+- Visual label updates (Malo, Regular, Bueno, Muy bueno, Excelente)
+
+#### 2. Written Comment (Required)
+
+Text area with:
+
+- **Character Limit**: 1,000 characters
+- **Placeholder**: Guidance text for helpful reviews
+- **Counter**: Shows remaining characters
+- **Validation**: Minimum 10 characters required
+
+#### 3. Review Guidelines
+
+Displayed guidelines:
+
+- Sé honesto y específico sobre tu experiencia
+- Evita lenguaje ofensivo o inapropiado
+- No compartas información personal sensible
+- Enfócate en el servicio profesional recibido
+
+### Submission Process
+
+<Steps>
+  <Step title="Client Opens Review Modal">
+    Clicks "Escribir Reseña" button on lawyer profile
+  </Step>
+  
+  <Step title="Selects Rating">
+    Chooses 1-5 stars based on experience
+  </Step>
+  
+  <Step title="Writes Comment">
+    Provides detailed feedback (max 1,000 characters)
+  </Step>
+  
+  <Step title="Submits Review">
+    System validates and saves review
+  </Step>
+  
+  <Step title="Review Status">
+    Review enters moderation queue for approval
+  </Step>
+</Steps>
+
+## Review Moderation
+
+All reviews go through a moderation process:
+
+### Review Status
+
+```typescript
+type ReviewStatus = 'pending' | 'approved' | 'rejected';
+```
+
+- **Pending**: Awaiting moderator review
+- **Approved**: Published and visible to all users
+- **Rejected**: Not published (violates guidelines)
+
+### Moderation Criteria
+
+Reviews are checked for:
+
+- Appropriate language (no profanity, hate speech)
+- Relevant content (about legal services received)
+- No personal information (phone numbers, addresses)
+- No spam or promotional content
+- Compliance with community guidelines
+
+<Note>
+Only approved reviews are displayed publicly and included in lawyer rating calculations.
+</Note>
+
+## Rating Statistics
+
+Each lawyer's profile displays comprehensive rating statistics:
+
+### Average Rating
+
+Calculated from all approved reviews:
+
+```typescript
+const stats = await ratingService.getLawyerRatingStats(lawyerId);
+
+// Returns:
+{
+  average: 4.5,    // Rounded to 1 decimal place
+  count: 24        // Total number of approved reviews
+}
+```
+
+### Rating Distribution
+
+Breakdown showing count of each star rating:
+
+```typescript
+{
+  5: 15,  // 15 five-star reviews
+  4: 6,   // 6 four-star reviews
+  3: 2,   // 2 three-star reviews
+  2: 1,   // 1 two-star review
+  1: 0    // 0 one-star reviews
+}
+```
+
+### Visual Display
+
+Rating distribution shown as horizontal bars:
+
+```
+5 ⭐ ████████████████████ 15
+4 ⭐ ████████             6
+3 ⭐ ███                  2
+2 ⭐ █                    1
+1 ⭐                      0
+```
+
+Percentage width calculated as: `(count / totalReviews) * 100`
+
+## Review Display
+
+Each review is displayed with:
+
+### Review Card Components
+
+1. **User Avatar**: Profile picture or initials
+2. **User Name**: Display name
+3. **Verification Badge**: "Verificado" badge confirming legitimate client
+4. **Star Rating**: Visual stars showing rating
+5. **Timestamp**: "Hace 2 meses" (time ago in Spanish)
+6. **Service Type**: Type of legal service received (optional)
+7. **Review Text**: Full comment with line breaks preserved
+8. **Helpful Actions**: Buttons to mark review as helpful/not helpful
+
+### Example Review Card
+
+```tsx
+<ReviewCard>
+  <Avatar src={user.avatar_url} alt={user.display_name} />
+  <Header>
+    <Name>{user.display_name}</Name>
+    <Badge>Verificado</Badge>
+    <Rating stars={5} />
+    <TimeAgo>hace 3 semanas</TimeAgo>
+  </Header>
+  <ServiceType>Derecho de Familia</ServiceType>
+  <Comment>
+    Excelente abogado. Me ayudó con mi caso de tuición y fue muy
+    profesional durante todo el proceso. Altamente recomendado.
+  </Comment>
+  <Actions>
+    <Button>👍 Útil (5)</Button>
+    <Button>👎 No útil</Button>
+  </Actions>
+</ReviewCard>
+```
+
+## Helpful Votes
+
+Users can vote on review helpfulness:
+
+### Voting Mechanism
+
+- **Helpful**: Thumbs up icon (👍)
+- **Not Helpful**: Thumbs down icon (👎)
+- **Count Display**: Shows number of helpful votes
+- **One Vote Per User**: Users can vote once per review
+- **Toggle**: Can change vote or remove it
+
+### Vote State Management
+
+```typescript
+const [isHelpful, setIsHelpful] = useState(false);
+const [isNotHelpful, setIsNotHelpful] = useState(false);
+
+const handleHelpful = () => {
+  setIsHelpful(!isHelpful);
+  setIsNotHelpful(false);  // Clear opposite vote
+  onHelpful?.(review.id);
+};
+```
+
+## Review Management
+
+### Updating a Review
+
+Clients can update their existing reviews:
+
+```typescript
+await ratingService.updateRating(ratingId, {
+  rating: 4,
+  comment: "Updated review text"
+}, userId);
+```
+
+**Requirements:**
+- Must be the original review author
+- Review must exist
+- Updated review goes through moderation again
+
+### Deleting a Review
+
+Clients can delete their reviews:
+
+```typescript
+await ratingService.deleteRating(ratingId, userId);
+```
+
+**Effects:**
+- Review permanently removed
+- Lawyer's average rating recalculated
+- Rating distribution updated
+
+<Note>
+Deleting a review cannot be undone. Clients will need to write a new review to replace it.
+</Note>
+
+## Lawyer Response
+
+Future feature: Lawyers will be able to respond to reviews:
+
+- **One Response Per Review**: Single official response
+- **Professional Tone**: Subject to same moderation
+- **Displayed Below Review**: Clearly marked as lawyer's response
+- **No Rating Changes**: Responses don't affect star rating
+
+## Review Sorting
+
+Reviews can be sorted by:
+
+1. **Most Recent**: Latest reviews first (default)
+2. **Highest Rated**: 5-star reviews first
+3. **Most Helpful**: Reviews with most helpful votes
+4. **Lowest Rated**: 1-star reviews first
+
+## Review Pagination
+
+Review display:
+
+- **Initial Load**: First 3 reviews shown
+- **Load More**: "Ver Todas las Reseñas (X más)" button
+- **All Reviews**: Shows complete review list
+
+## Verification Badge
+
+All reviews display a "Verificado" badge:
+
+```tsx
+<Badge className="bg-green-100 text-green-800">
+  Verificado
+</Badge>
+```
+
+Indicates:
+- Review from verified client
+- Completed consultation confirmed
+- Passed moderation review
+
+## Rating Service API
+
+The rating service provides these methods:
+
+```typescript
+ratingService = {
+  // Get all ratings for a lawyer
+  getRatingsByLawyer(lawyerId: string): Promise<Rating[]>
+  
+  // Get a user's rating for a lawyer
+  getUserRating(lawyerId: string, userId: string): Promise<Rating | null>
+  
+  // Create a new rating
+  createRating(input: CreateRatingInput, userId: string): Promise<Rating>
+  
+  // Update existing rating
+  updateRating(ratingId: string, input: UpdateRatingInput, userId: string): Promise<Rating>
+  
+  // Delete a rating
+  deleteRating(ratingId: string, userId: string): Promise<void>
+  
+  // Get statistics
+  getLawyerRatingStats(lawyerId: string): Promise<{
+    average: number;
+    count: number;
+  }>
+}
+```
+
+## FAQ
+
+<Accordion title="Can I review a lawyer I haven't hired?">
+No. You can only review lawyers with whom you've had a completed consultation or appointment. This ensures all reviews are from verified clients with firsthand experience.
+</Accordion>
+
+<Accordion title="Can I change my review after submitting it?">
+Yes, you can update your review at any time. Simply go to the lawyer's profile, find your review, and click "Edit". Note that updated reviews may go through moderation again before being published.
+</Accordion>
+
+<Accordion title="Why isn't my review showing up?">
+All reviews go through a moderation process to ensure they meet our community guidelines. This typically takes 24-48 hours. You'll receive a notification once your review is approved.
+</Accordion>
+
+<Accordion title="Can lawyers see who wrote each review?">
+Yes, reviews are not anonymous. Your display name and avatar are shown with your review. This transparency helps maintain authentic, honest feedback.
+</Accordion>
+
+<Accordion title="What if I receive an inappropriate review as a lawyer?">
+You can flag reviews that violate our community guidelines. Our moderation team will review flagged content within 24 hours and take appropriate action.
+</Accordion>

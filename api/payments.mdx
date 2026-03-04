@@ -1,0 +1,440 @@
+---
+title: Payments
+description: Payment processing API and webhooks
+icon: credit-card
+---
+
+# Payments API
+
+Process payments and manage transactions using MercadoPago integration.
+
+## Create Payment
+
+**Endpoint:** `POST /create-payment`
+
+**Authentication:** Not required (public endpoint)
+
+Creates a payment and returns a MercadoPago checkout link.
+
+### Request Body
+
+<ParamField path="amount" type="number">
+  Total amount to charge (mutually exclusive with originalAmount)
+</ParamField>
+
+<ParamField path="originalAmount" type="number">
+  Base amount before surcharges (mutually exclusive with amount)
+</ParamField>
+
+<ParamField path="appointmentId" type="string" required>
+  Associated appointment/booking ID
+</ParamField>
+
+<ParamField path="description" type="string">
+  Payment description (default: "Consulta Legal")
+</ParamField>
+
+<ParamField path="userId" type="string">
+  Client user ID ("guest" for anonymous users)
+</ParamField>
+
+<ParamField path="lawyerId" type="string">
+  Lawyer user ID ("consulta-general" for general consultations)
+</ParamField>
+
+<ParamField path="successUrl" type="string">
+  Redirect URL on successful payment
+</ParamField>
+
+<ParamField path="failureUrl" type="string">
+  Redirect URL on failed payment
+</ParamField>
+
+<ParamField path="pendingUrl" type="string">
+  Redirect URL for pending payment
+</ParamField>
+
+<ParamField path="userEmail" type="string">
+  Client email address
+</ParamField>
+
+<ParamField path="userName" type="string">
+  Client name
+</ParamField>
+
+### Payment Calculation
+
+The system automatically calculates:
+
+- **Original Amount**: Base price set by lawyer
+- **Client Surcharge**: Platform fee paid by client (default 10%)
+- **Platform Fee**: Commission kept by platform (default 20% of original)
+- **Lawyer Amount**: Amount transferred to lawyer (80% of original)
+
+These percentages are configurable in `platform_settings` table.
+
+### Example Request
+
+```json
+{
+  "originalAmount": 30000,
+  "appointmentId": "abc123def-4567-89ab-cdef-0123456789ab",
+  "description": "Consulta Derecho Civil - 1 hora",
+  "userId": "guest",
+  "lawyerId": "550e8400-e29b-41d4-a716-446655440000",
+  "userEmail": "cliente@example.com",
+  "userName": "Carlos Rodríguez",
+  "successUrl": "https://legalup.cl/payment/success",
+  "failureUrl": "https://legalup.cl/payment/failure",
+  "pendingUrl": "https://legalup.cl/payment/pending"
+}
+```
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Operation success status
+</ResponseField>
+
+<ResponseField name="payment_id" type="string">
+  Created payment ID (UUID)
+</ResponseField>
+
+<ResponseField name="payment_link" type="string">
+  MercadoPago checkout URL
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Success message
+</ResponseField>
+
+### Example Response
+
+```json 200 - Success
+{
+  "success": true,
+  "payment_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "payment_link": "https://www.mercadopago.cl/checkout/v1/redirect?pref_id=123456789-abc123",
+  "message": "Payment created successfully"
+}
+```
+
+### Error Responses
+
+```json 400 - Missing Fields
+{
+  "error": "Missing required fields",
+  "required": ["amount or originalAmount", "appointmentId"],
+  "received": {
+    "amount": null,
+    "originalAmount": null,
+    "appointmentId": "abc123"
+  }
+}
+```
+
+```json 400 - Invalid Amount
+{
+  "error": "Amount must be at least 1000 CLP"
+}
+```
+
+```json 500 - Server Error
+{
+  "error": "Internal server error",
+  "details": "MercadoPago API Error: ..."
+}
+```
+
+## Get Payment Status
+
+**Endpoint:** `GET /payment/:paymentId`
+
+**Authentication:** Not required
+
+### Path Parameters
+
+<ParamField path="paymentId" type="string" required>
+  Payment ID (UUID)
+</ParamField>
+
+### Response
+
+<ResponseField name="payment" type="object">
+  Payment details
+  
+  <ResponseField name="id" type="string">
+    Payment ID
+  </ResponseField>
+  
+  <ResponseField name="original_amount" type="number">
+    Base amount (CLP)
+  </ResponseField>
+  
+  <ResponseField name="client_surcharge" type="number">
+    Surcharge amount (CLP)
+  </ResponseField>
+  
+  <ResponseField name="client_surcharge_percent" type="number">
+    Surcharge percentage (e.g., 0.1 for 10%)
+  </ResponseField>
+  
+  <ResponseField name="platform_fee" type="number">
+    Platform commission (CLP)
+  </ResponseField>
+  
+  <ResponseField name="platform_fee_percent" type="number">
+    Platform fee percentage (e.g., 0.2 for 20%)
+  </ResponseField>
+  
+  <ResponseField name="lawyer_amount" type="number">
+    Amount for lawyer (CLP)
+  </ResponseField>
+  
+  <ResponseField name="currency" type="string">
+    Currency code ("CLP")
+  </ResponseField>
+  
+  <ResponseField name="status" type="string">
+    Payment status: `pending`, `succeeded`, `failed`
+  </ResponseField>
+  
+  <ResponseField name="user_id" type="string">
+    Client user ID
+  </ResponseField>
+  
+  <ResponseField name="lawyer_id" type="string">
+    Lawyer user ID
+  </ResponseField>
+  
+  <ResponseField name="metadata" type="object">
+    Additional payment metadata
+    
+    <ResponseField name="description" type="string">
+      Payment description
+    </ResponseField>
+    
+    <ResponseField name="appointment_id" type="string">
+      Associated appointment ID
+    </ResponseField>
+    
+    <ResponseField name="client_total" type="number">
+      Total amount paid by client (including surcharge)
+    </ResponseField>
+    
+    <ResponseField name="payment_gateway_id" type="string | null">
+      MercadoPago payment ID
+    </ResponseField>
+  </ResponseField>
+  
+  <ResponseField name="created_at" type="string">
+    Creation timestamp (ISO 8601)
+  </ResponseField>
+  
+  <ResponseField name="updated_at" type="string">
+    Last update timestamp (ISO 8601)
+  </ResponseField>
+</ResponseField>
+
+### Example Response
+
+```json 200 - Success
+{
+  "payment": {
+    "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "original_amount": 30000,
+    "client_surcharge": 3000,
+    "client_surcharge_percent": 0.1,
+    "platform_fee": 6000,
+    "platform_fee_percent": 0.2,
+    "lawyer_amount": 24000,
+    "currency": "CLP",
+    "status": "succeeded",
+    "user_id": "abc123-user-id",
+    "lawyer_id": "def456-lawyer-id",
+    "metadata": {
+      "description": "Consulta Derecho Civil",
+      "appointment_id": "xyz789-appointment-id",
+      "client_total": 33000,
+      "payment_gateway_id": "1234567890"
+    },
+    "created_at": "2026-03-04T10:00:00.000Z",
+    "updated_at": "2026-03-04T10:05:00.000Z"
+  }
+}
+```
+
+```json 404 - Not Found
+{
+  "error": "Payment not found"
+}
+```
+
+## MercadoPago Webhook
+
+**Endpoint:** `POST /api/mercadopago/webhook`
+
+**Authentication:** MercadoPago signature validation
+
+Receives payment notifications from MercadoPago.
+
+<Warning>
+This endpoint is called automatically by MercadoPago. Do not call it directly.
+</Warning>
+
+### Webhook Payload
+
+<ParamField path="type" type="string">
+  Notification type ("payment")
+</ParamField>
+
+<ParamField path="topic" type="string">
+  Event topic ("payment")
+</ParamField>
+
+<ParamField path="data" type="object">
+  Event data
+  
+  <ParamField path="id" type="string">
+    MercadoPago payment ID
+  </ParamField>
+</ParamField>
+
+### Example Webhook Payload
+
+```json
+{
+  "type": "payment",
+  "topic": "payment",
+  "data": {
+    "id": "1234567890"
+  }
+}
+```
+
+### Webhook Actions (Approved Payment)
+
+When a payment is approved, the system:
+
+1. **Updates booking status** to `confirmed`
+2. **Creates user account** if guest booking
+3. **Creates/updates profile** for the user
+4. **Creates appointment** record for lawyer dashboard
+5. **Associates booking with user**
+6. **Sends email confirmations** to client and lawyer
+7. **Tracks payment event** for analytics
+
+### Response
+
+```text 200 - OK
+OK
+```
+
+```json 500 - Error
+{
+  "error": "Internal server error"
+}
+```
+
+## Manual Payment Reconciliation
+
+**Endpoint:** `POST /api/mercadopago/reconcile/:paymentId`
+
+**Authentication:** Secret header required
+
+**Use case:** Backup endpoint if webhook delivery fails
+
+### Headers
+
+<ParamField path="x-reconcile-secret" type="string" required>
+  Admin reconciliation secret (env: `MP_RECONCILE_SECRET`)
+</ParamField>
+
+### Path Parameters
+
+<ParamField path="paymentId" type="string" required>
+  MercadoPago payment ID (not upLegal payment ID)
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Reconciliation success
+</ResponseField>
+
+<ResponseField name="paymentId" type="string">
+  MercadoPago payment ID
+</ResponseField>
+
+<ResponseField name="external_reference" type="string">
+  Booking/appointment ID
+</ResponseField>
+
+<ResponseField name="bookingUpdated" type="boolean">
+  Whether booking was updated
+</ResponseField>
+
+<ResponseField name="clientUserId" type="string">
+  Created or found client user ID
+</ResponseField>
+
+### Example Response
+
+```json 200 - Success
+{
+  "success": true,
+  "paymentId": "1234567890",
+  "external_reference": "abc123-booking-id",
+  "bookingUpdated": true,
+  "clientUserId": "def456-user-id"
+}
+```
+
+```json 401 - Unauthorized
+{
+  "error": "Unauthorized"
+}
+```
+
+```json 404 - Not Found
+{
+  "error": "Payment not found"
+}
+```
+
+```json 409 - Not Approved
+{
+  "error": "Payment not approved",
+  "status": "pending",
+  "status_detail": "pending_waiting_payment",
+  "external_reference": "abc123-booking-id"
+}
+```
+
+## Payment States
+
+| Status | Description |
+|--------|-------------|
+| `pending` | Payment created, awaiting confirmation |
+| `succeeded` | Payment successful, funds transferred |
+| `failed` | Payment failed or rejected |
+
+## Currency
+
+All payments are processed in Chilean Pesos (CLP). The minimum payment amount is **1,000 CLP**.
+
+## RLS Policies
+
+### Payments Table
+
+- **SELECT**: Users can view their own payments (as client or lawyer)
+- **INSERT**: Service role only (via RPC function)
+- **UPDATE**: Service role only (via webhook)
+- **DELETE**: Not allowed
+
+## Test Mode
+
+MercadoPago sandbox credentials can be used for testing:
+
+- Test cards available at [MercadoPago Developers](https://www.mercadopago.com.ar/developers/es/guides/online-payments/checkout-api/testing)
+- Sandbox payments return `sandbox_init_point` instead of `init_point`

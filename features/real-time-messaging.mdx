@@ -1,0 +1,346 @@
+---
+title: 'Real-Time Messaging System'
+description: 'Secure messaging platform with real-time updates and contact fee management'
+icon: 'messages'
+---
+
+## Overview
+
+upLegal's messaging system enables direct, real-time communication between clients and lawyers. Built on Supabase real-time subscriptions, the platform ensures instant message delivery with status tracking and contact fee management.
+
+## Core Features
+
+### Real-Time Message Delivery
+
+Messages are delivered instantly using Supabase real-time subscriptions:
+
+- **Instant Updates**: No page refresh required
+- **Status Tracking**: Sending → Delivered → Read
+- **Optimistic UI**: Messages appear immediately while sending
+- **Automatic Retry**: Failed messages can be retried
+
+### Message Status Lifecycle
+
+```typescript
+type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read';
+```
+
+1. **Sending**: Message is being transmitted to server
+2. **Sent**: Server has received the message
+3. **Delivered**: Message has been stored and sent to recipient
+4. **Read**: Recipient has viewed the message
+
+## Conversation Types
+
+### One-on-One Conversations
+
+Direct messaging between a client and a lawyer:
+
+```typescript
+{
+  id: string,
+  participants: [client, lawyer],
+  isGroup: false,
+  unreadCount: number,
+  lastMessage: Message,
+  createdAt: Date,
+  updatedAt: Date
+}
+```
+
+### Group Conversations
+
+Multi-participant conversations (e.g., legal team):
+
+```typescript
+{
+  id: string,
+  participants: User[],
+  isGroup: true,
+  groupName: string,
+  unreadCount: number,
+  lastMessage: Message,
+  createdAt: Date,
+  updatedAt: Date
+}
+```
+
+<Note>
+Group conversations allow collaboration with multiple lawyers from the same firm or legal team.
+</Note>
+
+## Contact Fee System
+
+Lawyers can set a contact fee for initial consultations:
+
+### First Message Flow
+
+1. **First Message**: Client sends initial message to lawyer (free)
+2. **Lawyer Response**: Lawyer can respond freely
+3. **Subsequent Messages**: Client must pay contact fee (if set by lawyer)
+
+### Payment Check
+
+Before sending a second message, the system:
+
+```typescript
+// Check if it's the first message
+const isFirstMessage = await isFirstMessageInConversation(
+  conversationId, 
+  userId
+);
+
+if (!isFirstMessage) {
+  // Check lawyer's contact fee
+  const contactFee = await getLawyerContactFee(lawyerId);
+  
+  if (contactFee > 0) {
+    // Verify payment exists
+    const payment = await checkPaymentExists(
+      conversationId,
+      userId,
+      'contact_fee'
+    );
+    
+    if (!payment || payment.status !== 'succeeded') {
+      // Redirect to payment
+      window.location.href = `/checkout?type=contact_fee&...`;
+      return;
+    }
+  }
+}
+```
+
+<Note>
+Contact fees are one-time payments per conversation. Once paid, clients can message the lawyer unlimited times in that conversation.
+</Note>
+
+## Message Features
+
+### Message Structure
+
+```typescript
+interface Message {
+  id: string;
+  content: string;
+  senderId: string;
+  conversationId: string;
+  status: 'sending' | 'sent' | 'delivered' | 'read';
+  timestamp: Date;
+  attachments?: Attachment[];
+}
+```
+
+### File Attachments
+
+Messages support file attachments:
+
+- Documents (PDF, DOC, DOCX)
+- Images (JPG, PNG, GIF)
+- Legal documents
+- Size limit: Defined by Supabase storage configuration
+
+### Unread Count
+
+Each conversation tracks unread messages:
+
+```typescript
+// Automatically updated when:
+// 1. New message arrives in inactive conversation
+// 2. User switches conversations
+// 3. Messages are marked as read
+
+conversation.unreadCount: number
+```
+
+## Real-Time Subscriptions
+
+The messaging system uses Supabase real-time features:
+
+### Message Subscription
+
+```typescript
+supabase
+  .from('messages')
+  .insert([{
+    content: payload.content,
+    sender_id: currentUser.id,
+    conversation_id: payload.conversationId,
+    status: 'delivered',
+    attachments: payload.attachments
+  }])
+  .select()
+  .single();
+```
+
+### Automatic Updates
+
+- **New Messages**: Instantly appear in active conversations
+- **Status Changes**: Real-time updates when messages are read
+- **Typing Indicators**: Show when other participant is typing (future feature)
+- **Online Status**: Display participant's online/offline status
+
+## User Interface
+
+### Conversation List
+
+Displays all conversations with:
+
+- Participant names and avatars
+- Last message preview
+- Unread count badge
+- Timestamp of last activity
+- Online status indicator
+
+### Message Thread
+
+Active conversation view shows:
+
+- All messages in chronological order
+- Sender avatar and name
+- Message timestamp
+- Read/delivered status
+- Attachment previews
+
+### Message Composer
+
+Input area includes:
+
+- Text input field
+- Attachment button
+- Send button
+- Character limit (if applicable)
+- File upload progress
+
+## Participant Information
+
+```typescript
+interface MessageUser {
+  id: string;
+  name: string;
+  email?: string;
+  avatarUrl?: string;
+  role: 'client' | 'lawyer' | 'admin';
+  isOnline: boolean;
+  lastSeen?: Date;
+}
+```
+
+### Online Status
+
+Participants show real-time availability:
+
+- **Green dot**: Currently online
+- **Gray dot**: Offline
+- **Last seen**: Timestamp of last activity (when offline)
+
+## Creating Conversations
+
+### From Lawyer Profile
+
+Clients can initiate conversations from:
+
+1. Lawyer profile page
+2. "Contactar" button on lawyer card
+3. After booking a consultation
+
+### Initial Message
+
+```typescript
+await createConversation({
+  participantIds: [lawyerId],
+  isGroup: false,
+  initialMessage: "Hola, necesito ayuda con..."
+});
+```
+
+<Note>
+The initial message is sent automatically when the conversation is created, streamlining the first contact experience.
+</Note>
+
+## Message Management
+
+### Mark as Read
+
+Messages are marked as read when:
+
+```typescript
+// Automatically when conversation is opened
+markAsRead(conversationId);
+
+// Updates:
+// 1. Message status to 'read'
+// 2. Conversation unreadCount to 0
+// 3. Notifies sender of read status
+```
+
+### Conversation Sorting
+
+Conversations are sorted by:
+
+1. **Unread first**: Conversations with unread messages appear at top
+2. **Most recent**: Then sorted by last message timestamp
+3. **Active status**: Online participants prioritized
+
+## Error Handling
+
+### Failed Message Delivery
+
+If a message fails to send:
+
+1. Status changes to "failed"
+2. Error message is displayed
+3. Retry button appears
+4. Message is removed from optimistic UI if retry is cancelled
+
+### Network Interruption
+
+- **Offline Detection**: System detects network loss
+- **Queue Management**: Messages queued for sending when connection restored
+- **User Notification**: Clear indication of connectivity status
+
+## Security & Privacy
+
+### Access Control
+
+Users can only:
+
+- View conversations they are participants in
+- Send messages to conversations they belong to
+- Access messages within their conversations
+
+### Data Storage
+
+All messages are:
+
+- Stored in Supabase database
+- Protected by Row Level Security (RLS)
+- Accessible only to conversation participants
+- Encrypted in transit and at rest
+
+## FAQ
+
+<Accordion title="How do I know if my message was delivered?">
+Message status indicators show the delivery state:
+- Single check: Sent
+- Double check: Delivered
+- Blue checks: Read by recipient
+
+You'll see these indicators next to each message you send.
+</Accordion>
+
+<Accordion title="What is a contact fee?">
+A contact fee is a one-time payment that some lawyers require before clients can continue messaging beyond the initial contact. Once paid, you can message that lawyer unlimited times in that conversation. The fee amount is set by each lawyer individually.
+</Accordion>
+
+<Accordion title="Can I send files through messages?">
+Yes! You can attach documents, images, and other files to your messages. Simply click the attachment button in the message composer and select your file.
+</Accordion>
+
+<Accordion title="Are my messages private?">
+Absolutely. All messages are encrypted and only visible to the participants in the conversation. upLegal uses Row Level Security to ensure your conversations remain completely private.
+</Accordion>
+
+<Accordion title="Can I delete messages?">
+Currently, messages cannot be deleted once sent. We recommend carefully reviewing messages before sending. Message deletion features may be added in future updates.
+</Accordion>

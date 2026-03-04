@@ -1,0 +1,356 @@
+---
+title: Messaging
+description: Real-time messaging API for client-lawyer communication
+icon: message
+---
+
+# Messaging API
+
+Real-time messaging system for communication between clients and lawyers.
+
+## Database Schema
+
+Messages are stored in the `messages` table with the following structure:
+
+### Message Object
+
+<ResponseField name="id" type="string">
+  Message ID (UUID)
+</ResponseField>
+
+<ResponseField name="sender_id" type="string">
+  Sender's user ID
+</ResponseField>
+
+<ResponseField name="receiver_id" type="string">
+  Receiver's user ID
+</ResponseField>
+
+<ResponseField name="content" type="string">
+  Message content (text)
+</ResponseField>
+
+<ResponseField name="consultation_id" type="string | null">
+  Associated consultation ID (if applicable)
+</ResponseField>
+
+<ResponseField name="service_id" type="string | null">
+  Associated service ID (if applicable)
+</ResponseField>
+
+<ResponseField name="read" type="boolean">
+  Whether message has been read (default: false)
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  Message timestamp (ISO 8601)
+</ResponseField>
+
+## Send Message
+
+Messages are sent using Supabase client-side operations:
+
+```typescript
+const { data, error } = await supabase
+  .from('messages')
+  .insert({
+    sender_id: currentUserId,
+    receiver_id: recipientId,
+    content: messageText,
+    consultation_id: consultationId, // optional
+    service_id: serviceId, // optional
+    read: false
+  })
+  .select()
+  .single();
+```
+
+### Parameters
+
+<ParamField path="sender_id" type="string" required>
+  Current user's ID
+</ParamField>
+
+<ParamField path="receiver_id" type="string" required>
+  Recipient's user ID
+</ParamField>
+
+<ParamField path="content" type="string" required>
+  Message text content
+</ParamField>
+
+<ParamField path="consultation_id" type="string">
+  Link message to a consultation
+</ParamField>
+
+<ParamField path="service_id" type="string">
+  Link message to a service
+</ParamField>
+
+## Get Messages
+
+Retrieve messages for a conversation:
+
+```typescript
+const { data: messages, error } = await supabase
+  .from('messages')
+  .select('*')
+  .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
+  .order('created_at', { ascending: true });
+```
+
+### Filter by Conversation
+
+Get messages between two specific users:
+
+```typescript
+const { data: messages, error } = await supabase
+  .from('messages')
+  .select('*')
+  .or(
+    `and(sender_id.eq.${user1Id},receiver_id.eq.${user2Id}),` +
+    `and(sender_id.eq.${user2Id},receiver_id.eq.${user1Id})`
+  )
+  .order('created_at', { ascending: true });
+```
+
+### Filter by Consultation
+
+Get all messages for a consultation:
+
+```typescript
+const { data: messages, error } = await supabase
+  .from('messages')
+  .select('*')
+  .eq('consultation_id', consultationId)
+  .order('created_at', { ascending: true });
+```
+
+## Mark as Read
+
+Mark messages as read:
+
+```typescript
+const { error } = await supabase
+  .from('messages')
+  .update({ read: true })
+  .eq('receiver_id', currentUserId)
+  .eq('read', false);
+```
+
+### Mark Specific Message as Read
+
+```typescript
+const { error } = await supabase
+  .from('messages')
+  .update({ read: true })
+  .eq('id', messageId);
+```
+
+## Real-time Subscriptions
+
+Listen for new messages in real-time:
+
+```typescript
+const messageSubscription = supabase
+  .channel('messages')
+  .on(
+    'postgres_changes',
+    {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'messages',
+      filter: `receiver_id=eq.${currentUserId}`
+    },
+    (payload) => {
+      console.log('New message:', payload.new);
+      // Handle new message
+    }
+  )
+  .subscribe();
+
+// Cleanup
+return () => {
+  messageSubscription.unsubscribe();
+};
+```
+
+### Subscribe to Conversation Updates
+
+```typescript
+const conversationChannel = supabase
+  .channel('conversation')
+  .on(
+    'postgres_changes',
+    {
+      event: '*',
+      schema: 'public',
+      table: 'messages',
+      filter: `or(and(sender_id.eq.${user1Id},receiver_id.eq.${user2Id}),and(sender_id.eq.${user2Id},receiver_id.eq.${user1Id}))`
+    },
+    (payload) => {
+      console.log('Conversation update:', payload);
+      // Handle conversation update
+    }
+  )
+  .subscribe();
+```
+
+## Get Unread Count
+
+Count unread messages for current user:
+
+```typescript
+const { count, error } = await supabase
+  .from('messages')
+  .select('*', { count: 'exact', head: true })
+  .eq('receiver_id', currentUserId)
+  .eq('read', false);
+
+console.log('Unread messages:', count);
+```
+
+## Get Conversations List
+
+Get list of all conversations with latest message:
+
+```typescript
+const { data: conversations, error } = await supabase
+  .rpc('get_conversations', {
+    user_id: currentUserId
+  });
+```
+
+<Note>
+This requires a custom database function `get_conversations` that returns unique conversations with the most recent message.
+</Note>
+
+## Example: Complete Chat Component
+
+```typescript
+import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabaseClient';
+
+interface Message {
+  id: string;
+  sender_id: string;
+  receiver_id: string;
+  content: string;
+  read: boolean;
+  created_at: string;
+}
+
+export function ChatComponent({ 
+  currentUserId, 
+  recipientId 
+}: { 
+  currentUserId: string; 
+  recipientId: string; 
+}) {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+
+  // Load messages
+  useEffect(() => {
+    const loadMessages = async () => {
+      const { data } = await supabase
+        .from('messages')
+        .select('*')
+        .or(
+          `and(sender_id.eq.${currentUserId},receiver_id.eq.${recipientId}),` +
+          `and(sender_id.eq.${recipientId},receiver_id.eq.${currentUserId})`
+        )
+        .order('created_at', { ascending: true });
+
+      if (data) setMessages(data);
+    };
+
+    loadMessages();
+
+    // Subscribe to new messages
+    const subscription = supabase
+      .channel('messages')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `receiver_id=eq.${currentUserId}`
+        },
+        (payload) => {
+          setMessages(prev => [...prev, payload.new as Message]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [currentUserId, recipientId]);
+
+  // Send message
+  const sendMessage = async () => {
+    if (!newMessage.trim()) return;
+
+    const { data, error } = await supabase
+      .from('messages')
+      .insert({
+        sender_id: currentUserId,
+        receiver_id: recipientId,
+        content: newMessage,
+        read: false
+      })
+      .select()
+      .single();
+
+    if (data) {
+      setMessages(prev => [...prev, data]);
+      setNewMessage('');
+    }
+  };
+
+  return (
+    <div>
+      <div className="messages">
+        {messages.map(msg => (
+          <div key={msg.id}>
+            <strong>{msg.sender_id === currentUserId ? 'You' : 'Them'}:</strong>
+            {msg.content}
+          </div>
+        ))}
+      </div>
+      <input
+        value={newMessage}
+        onChange={(e) => setNewMessage(e.target.value)}
+        onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+      />
+      <button onClick={sendMessage}>Send</button>
+    </div>
+  );
+}
+```
+
+## RLS Policies
+
+### Messages Table
+
+- **SELECT**: Users can read messages they sent or received
+- **INSERT**: Authenticated users can send messages
+- **UPDATE**: Users can update messages they received (for marking as read)
+- **DELETE**: Users can delete their own sent messages
+
+## Best Practices
+
+1. **Always filter by user**: Ensure RLS policies are working by filtering queries
+2. **Clean up subscriptions**: Always unsubscribe when components unmount
+3. **Handle offline**: Implement retry logic for failed message sends
+4. **Validate content**: Sanitize message content on client and server
+5. **Rate limiting**: Implement client-side throttling for message sending
+6. **Pagination**: Load messages in chunks for long conversations
+
+## Related Tables
+
+- **consultations**: Link messages to legal consultations
+- **services**: Link messages to specific services
+- **profiles**: Get sender/receiver profile information

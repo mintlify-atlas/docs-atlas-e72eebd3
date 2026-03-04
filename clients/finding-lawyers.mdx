@@ -1,0 +1,219 @@
+---
+title: Finding Lawyers
+description: How clients search, filter, and discover the right lawyer for their legal needs on upLegal
+---
+
+upLegal makes it easy for clients to find verified lawyers with transparent pricing and clear specializations. The search system uses advanced filtering to match clients with the right legal professionals.
+
+## Search Overview
+
+Clients can search for lawyers using multiple criteria:
+- **Text search**: Search by name, specialty keywords, or legal topics
+- **Location**: Filter by Chilean regions and cities
+- **Specialty**: Choose from 19 legal specializations
+- **Price range**: Filter by hourly consultation rates
+- **Rating**: Minimum rating requirements
+- **Experience**: Years of practice
+
+## Available Legal Specialties
+
+The platform supports 19 legal practice areas:
+
+<Tabs>
+  <Tab title="Civil & Commercial">
+    - Derecho Civil
+    - Derecho Comercial
+    - Derecho de Propiedad Intelectual
+    - Derecho Inmobiliario
+  </Tab>
+  <Tab title="Family & Labor">
+    - Derecho de Familia
+    - Derecho Laboral
+    - Derecho de Seguridad Social
+  </Tab>
+  <Tab title="Criminal & Administrative">
+    - Derecho Penal
+    - Derecho Administrativo
+    - Derecho Procesal
+  </Tab>
+  <Tab title="Specialized">
+    - Derecho Tributario
+    - Derecho de Salud
+    - Derecho Ambiental
+    - Derecho de Consumidor
+    - Derecho Minero
+    - Derecho Aduanero
+    - Derecho Marítimo
+    - Derecho Aeronáutico
+    - Derecho Deportivo
+  </Tab>
+</Tabs>
+
+## Search Flow
+
+<Steps>
+  <Step title="Enter Search Criteria">
+    Clients can enter keywords in the search bar or select specialties from the specialty slider. The search supports natural language for common legal issues:
+    
+    - Family law keywords: "familia", "divorcio", "pensión", "alimentos", "visitas", "tuición"
+    - Labor law keywords: "despido", "laboral", "trabajo", "finiquito", "tutela"
+    
+    The system automatically suggests relevant specialties based on search terms.
+  </Step>
+  
+  <Step title="Apply Filters">
+    Click the "Filtros" button to access advanced filtering options:
+    
+    **Modality**
+    - Online consultations
+    - In-person (presencial) with region selection
+    
+    **Specialty Selection**
+    - Select multiple specialties
+    - "Todas" option to view all lawyers
+    
+    **Price Range**
+    - Slider control from $0 to $1,000,000 CLP/hour
+    - 10,000 CLP step increments
+    
+    **Rating Filter**
+    - Star rating selector (1-5 stars)
+    - Shows only lawyers meeting minimum rating
+    
+    **Experience Filter**
+    - Quick select: Any, 3+, 5+, 10+ years
+  </Step>
+  
+  <Step title="Sort Results">
+    Choose how to order results:
+    - **Recomendados** (Recommended): Verified status, profile completeness, then rating
+    - **Mejor calificados**: Highest rated first
+    - **Experiencia**: Most experienced first
+    - **Precio**: Lowest to highest hourly rate
+  </Step>
+  
+  <Step title="Review Lawyer Cards">
+    Each lawyer card displays:
+    - Profile photo and name
+    - PJUD verification badge (if verified)
+    - Specialties (badges)
+    - Star rating and review count
+    - Location
+    - Hourly rate in CLP
+    - Brief bio preview
+    - Action buttons (View Profile, Book Consultation)
+  </Step>
+</Steps>
+
+## Search Features
+
+### Smart Keyword Detection
+
+The search automatically detects legal topics and suggests specialties:
+
+```typescript
+// src/pages/SearchResults.tsx:443-461
+const familyKeywords = ['familia', 'divorcio', 'pension', 'alimentos', 'visitas', 'tuicion', 'cuidado personal', 'separacion'];
+const laborKeywords = ['despido', 'laboral', 'trabajo', 'finiquito', 'tutela'];
+```
+
+<Info>
+  When searching for "divorcio", the system automatically adds "Derecho de Familia" to the specialty filters.
+</Info>
+
+### Location Coverage
+
+Search supports all Chilean regions and major cities across 16 regions:
+- Región Metropolitana (Santiago, Maipú, Puente Alto, etc.)
+- Valparaíso (Valparaíso, Viña del Mar, Quilpué, etc.)
+- Biobío (Concepción, Talcahuano, Los Ángeles, etc.)
+- And 13 more regions covering all of Chile
+
+### Active Filter Display
+
+Active filters are shown as removable badges above search results:
+
+<img src="/images/active-filters-display.png" alt="Active filters shown as blue badges with X buttons" />
+
+- Click X on any badge to remove that filter
+- "Limpiar todo" button clears all active filters
+- Filters persist in URL for shareable searches
+
+## Infinite Scroll
+
+Results load progressively as you scroll:
+- Initial load: 12 lawyers
+- Automatic loading as you scroll down
+- Smooth loading indicators
+- No pagination buttons needed
+
+<Note>
+  The search uses debouncing (300ms) to avoid excessive server requests while typing.
+</Note>
+
+## Lawyer Ranking
+
+Results are prioritized by:
+
+1. **PJUD Verification Status**: Verified lawyers appear first
+2. **Profile Completeness**: Complete profiles (bio, specialties, location, hourly rate) rank higher
+3. **Selected Sort Order**: Then applies user's chosen sorting (rating, experience, price)
+
+```typescript
+// src/pages/SearchResults.tsx:331-358
+const sortedLawyers = [...formattedLayers].sort((a, b) => {
+  // First priority: Verified status
+  const aVerified = Boolean(a.verified);
+  const bVerified = Boolean(b.verified);
+  
+  if (aVerified && !bVerified) return -1;
+  if (!aVerified && bVerified) return 1;
+
+  // Second priority: Profile completeness
+  const isAComplete = Boolean(a.bio?.trim() && a.specialties?.length > 0 && 
+                    a.location?.trim() && a.hourlyRate > 0);
+  const isBComplete = Boolean(b.bio?.trim() && b.specialties?.length > 0 && 
+                    b.location?.trim() && b.hourlyRate > 0);
+  
+  if (isAComplete && !isBComplete) return -1;
+  if (!isAComplete && isBComplete) return 1;
+  
+  // Third priority: Rating
+  return b.rating - a.rating;
+});
+```
+
+## Empty States
+
+### No Search Performed
+When first visiting the search page without parameters, clients see a prompt to enter search criteria.
+
+### No Results Found
+If no lawyers match the filters, clients see:
+- Helpful message explaining no matches
+- Suggestion to adjust filters
+- "Limpiar filtros" button to reset search
+
+<Warning>
+  Sundays are excluded from available dates as most lawyers don't work on Sundays in Chile.
+</Warning>
+
+## Search Performance
+
+- **Debounced search**: 300ms delay prevents excessive API calls
+- **Dynamic imports**: Code splitting for specialty slider
+- **Optimized loading**: Skeleton screens during initial load
+- **Infinite scroll**: Efficient pagination without manual interaction
+
+## Next Steps
+
+After finding a lawyer:
+
+<CardGroup cols={2}>
+  <Card title="View Profile" icon="user" href="#">
+    Click "Ver perfil" to see full lawyer details, reviews, and availability
+  </Card>
+  <Card title="Book Consultation" icon="calendar" href="/clients/booking-consultations">
+    Click "Agendar" to book a consultation directly
+  </Card>
+</CardGroup>

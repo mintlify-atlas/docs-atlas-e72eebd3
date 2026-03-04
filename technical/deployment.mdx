@@ -1,0 +1,389 @@
+---
+title: Deployment Guide
+description: Deploy upLegal to production
+---
+
+## Architecture Overview
+
+upLegal uses a split deployment architecture:
+
+- **Frontend (React + Vite)**: Deployed to Netlify
+- **Backend (Express API)**: Deployed to Render
+
+## Frontend Deployment (Netlify)
+
+### Netlify Configuration
+
+The frontend is configured via `netlify.toml`:
+
+```toml
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "18.0.0"
+```
+
+### Build Settings
+
+| Setting | Value |
+|---------|-------|
+| Build command | `npm run build` |
+| Publish directory | `dist` |
+| Node version | 18.0.0 |
+
+### API Redirects
+
+The `netlify.toml` configures API requests to proxy to the backend:
+
+```toml
+[[redirects]]
+  from = "/api/*"
+  to = "https://uplegal-service.onrender.com/api/:splat"
+  status = 200
+  force = true
+  headers = {Access-Control-Allow-Origin = "*"}
+```
+
+### SPA Routing
+
+For client-side routing (React Router):
+
+```toml
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+```
+
+### Cache Headers
+
+The configuration disables caching for JavaScript bundles and index.html to ensure users always get the latest version:
+
+```toml
+[[headers]]
+  for = "/assets/*.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    Pragma = "no-cache"
+    Expires = "0"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+```
+
+### Deploy to Netlify
+
+<Steps>
+  <Step title="Connect your repository">
+    1. Go to [Netlify](https://netlify.com)
+    2. Click "Add new site" > "Import an existing project"
+    3. Connect your Git provider and select the repository
+  </Step>
+
+  <Step title="Configure build settings">
+    Netlify will automatically detect the `netlify.toml` configuration.
+    
+    Verify:
+    - Build command: `npm run build`
+    - Publish directory: `dist`
+    - Node version: 18.0.0
+  </Step>
+
+  <Step title="Set environment variables">
+    In Netlify dashboard, go to **Site settings** > **Environment variables**
+    
+    Add all `VITE_*` prefixed variables:
+    ```bash
+    VITE_SUPABASE_URL=...
+    VITE_SUPABASE_ANON_KEY=...
+    VITE_APP_URL=...
+    VITE_API_BASE_URL=...
+    VITE_MERCADOPAGO_CLIENT_ID=...
+    ```
+    
+    <Warning>
+      Do NOT add `VITE_SUPABASE_SERVICE_ROLE_KEY` or other sensitive backend credentials to Netlify.
+    </Warning>
+  </Step>
+
+  <Step title="Deploy">
+    Click "Deploy site". Netlify will:
+    1. Clone your repository
+    2. Install dependencies (`npm install`)
+    3. Run build command (`npm run build`)
+    4. Publish the `dist` folder
+  </Step>
+
+  <Step title="Configure custom domain (optional)">
+    In **Domain settings**, add your custom domain (e.g., `legalup.cl`)
+  </Step>
+</Steps>
+
+## Backend Deployment (Render)
+
+### Server Configuration
+
+The backend server runs on `server.mjs` using Express:
+
+- **Entry point**: `server.mjs`
+- **Port**: Configured by Render (via `process.env.PORT`) or defaults to 3000
+- **Start command**: `npm run server` or `node server.mjs`
+
+### Deploy to Render
+
+<Steps>
+  <Step title="Create a new Web Service">
+    1. Go to [Render Dashboard](https://dashboard.render.com)
+    2. Click "New +" > "Web Service"
+    3. Connect your Git repository
+  </Step>
+
+  <Step title="Configure service settings">
+    | Setting | Value |
+    |---------|-------|
+    | Name | `uplegal-service` |
+    | Environment | Node |
+    | Build Command | `npm install` |
+    | Start Command | `node server.mjs` |
+    | Instance Type | Free (or paid for production) |
+  </Step>
+
+  <Step title="Set environment variables">
+    In the Render dashboard, add all required environment variables:
+    
+    ```bash
+    # Supabase
+    VITE_SUPABASE_URL=https://your-project.supabase.co
+    VITE_SUPABASE_SERVICE_ROLE_KEY=eyJhbGci...
+    
+    # MercadoPago
+    VITE_MERCADOPAGO_ACCESS_TOKEN=APP_USR-...
+    VITE_MERCADOPAGO_CLIENT_ID=...
+    VITE_MERCADOPAGO_CLIENT_SECRET=...
+    VITE_MERCADOPAGO_WEBHOOK_URL=https://uplegal-service.onrender.com/api/mercadopago/webhook
+    MERCADOPAGO_WEBHOOK_URL=https://uplegal-service.onrender.com/api/mercadopago/webhook
+    
+    # Application URLs
+    VITE_APP_URL=https://legalup.cl
+    FRONTEND_URL=https://legalup.cl
+    VITE_API_BASE_URL=https://uplegal-service.onrender.com
+    RENDER_EXTERNAL_URL=https://uplegal-service.onrender.com
+    
+    # Email
+    RESEND_API_KEY=re_...
+    VITE_RESEND_API_KEY=re_...
+    
+    # Node Environment
+    NODE_ENV=production
+    ```
+  </Step>
+
+  <Step title="Deploy">
+    Click "Create Web Service". Render will:
+    1. Clone your repository
+    2. Install dependencies
+    3. Start the server with `node server.mjs`
+    4. Assign a public URL (e.g., `https://uplegal-service.onrender.com`)
+  </Step>
+
+  <Step title="Configure health checks">
+    Render automatically monitors the `/health` endpoint:
+    
+    ```javascript
+    app.get('/health', (req, res) => {
+      res.json({ ok: true, timestamp: Date.now() });
+    });
+    ```
+  </Step>
+</Steps>
+
+## CORS Configuration
+
+The backend server is configured with CORS to allow requests from specific origins:
+
+```javascript
+const corsOptions = {
+  origin: [
+    'https://legalup.cl',
+    'https://www.legalup.cl',
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'https://uplegal.netlify.app'
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  credentials: true
+};
+```
+
+<Info>
+  Update the `origin` array in `server.mjs` to include your production frontend URL.
+</Info>
+
+## Build Modes
+
+### Production Build
+
+```bash
+npm run build
+```
+
+Production builds:
+- Minify code with Terser
+- Remove console logs
+- Optimize bundle size
+- No sourcemaps (unless in dev mode)
+
+### Development Build
+
+```bash
+npm run build:dev
+```
+
+Development builds include:
+- Sourcemaps for debugging
+- Unminified code
+- Development environment variables
+
+### Vite Build Configuration
+
+From `vite.config.ts`:
+
+```typescript
+build: {
+  outDir: 'dist',
+  assetsDir: 'assets',
+  sourcemap: mode === 'development',
+  minify: 'terser',
+  chunkSizeWarningLimit: 1000,
+}
+```
+
+## Environment-Specific Configuration
+
+### Development
+
+- Frontend: `http://localhost:3001`
+- Backend: `http://localhost:3000`
+- Use test MercadoPago credentials
+- Enable verbose logging
+
+### Production
+
+- Frontend: `https://legalup.cl` (Netlify)
+- Backend: `https://uplegal-service.onrender.com` (Render)
+- Use live MercadoPago credentials
+- Production logging and error handling
+
+## Webhooks Configuration
+
+### MercadoPago Webhooks
+
+Configure the webhook URL in MercadoPago dashboard:
+
+```
+https://uplegal-service.onrender.com/api/mercadopago/webhook
+```
+
+Or set via environment variable:
+
+```bash
+VITE_MERCADOPAGO_WEBHOOK_URL=https://uplegal-service.onrender.com/api/mercadopago/webhook
+```
+
+The server validates webhook notifications for payment events.
+
+## Monitoring and Logs
+
+### Netlify Logs
+
+- Access via Netlify dashboard > **Deploys** > Select deploy > **Deploy log**
+- Shows build output and deployment status
+
+### Render Logs
+
+- Access via Render dashboard > Select service > **Logs**
+- Real-time server logs including:
+  - API requests
+  - Environment variable validation
+  - Payment processing
+  - Error traces
+
+### Server Health Check
+
+Monitor backend health:
+
+```bash
+curl https://uplegal-service.onrender.com/health
+```
+
+Response:
+
+```json
+{
+  "ok": true,
+  "timestamp": 1234567890
+}
+```
+
+## Rollback and Version Control
+
+### Netlify Rollback
+
+1. Go to **Deploys** in Netlify dashboard
+2. Find a previous successful deploy
+3. Click **Publish deploy**
+
+### Render Rollback
+
+1. Go to service in Render dashboard
+2. Click **Manual Deploy** > Select a previous commit
+3. Or push a git revert to trigger auto-deploy
+
+## Troubleshooting
+
+### Build Failures
+
+**Issue**: Netlify build fails with module errors
+
+**Solution**: 
+- Check Node version matches `netlify.toml` (18.0.0)
+- Verify all dependencies are in `package.json`
+- Clear build cache in Netlify settings
+
+### API Connection Issues
+
+**Issue**: Frontend can't reach backend API
+
+**Solution**:
+- Verify `VITE_API_BASE_URL` points to Render service URL
+- Check CORS configuration includes frontend URL
+- Ensure backend is running (check `/health` endpoint)
+
+### Environment Variables Not Loading
+
+**Issue**: App behaves incorrectly or crashes
+
+**Solution**:
+- Verify all required variables are set in hosting platform
+- Frontend variables must be prefixed with `VITE_`
+- Redeploy after adding new variables
+
+### MercadoPago Webhooks Not Working
+
+**Issue**: Payments don't update booking status
+
+**Solution**:
+- Verify `VITE_MERCADOPAGO_WEBHOOK_URL` is set correctly
+- Check webhook is configured in MercadoPago dashboard
+- Test webhook endpoint is publicly accessible
+- Review Render logs for webhook errors
+
+## Next Steps
+
+- [Environment Variables Reference](/technical/environment-variables)
+- [Local Development Setup](/technical/local-setup)

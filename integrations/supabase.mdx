@@ -1,0 +1,304 @@
+---
+title: 'Supabase Integration'
+description: 'Complete guide to Supabase authentication, database, and storage integration in upLegal'
+---
+
+# Supabase Integration
+
+upLegal uses Supabase as its primary backend service for authentication, database management, and storage. This guide covers the complete integration setup and usage patterns.
+
+## Setup
+
+### Environment Variables
+
+Configure the following environment variables in your `.env.local` file:
+
+```bash
+VITE_SUPABASE_URL=your_supabase_project_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+VITE_SUPABASE_SERVICE_ROLE_KEY=your_service_role_key  # Server-side only
+```
+
+<Warning>
+  Never expose the `VITE_SUPABASE_SERVICE_ROLE_KEY` in client-side code. This key bypasses Row Level Security (RLS) and should only be used in server environments.
+</Warning>
+
+### Client Initialization
+
+The Supabase client is initialized as a singleton to ensure consistent connection management:
+
+```typescript
+// src/lib/supabaseClient.ts
+import { createClient } from '@supabase/supabase-js';
+import type { Database } from '@/types/supabase';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+export const getSupabaseClient = () => {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Missing required environment variables');
+  }
+
+  const options = {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  };
+
+  return createClient<Database>(supabaseUrl, supabaseAnonKey, options);
+};
+
+// Default export for convenience
+export const supabase = getSupabaseClient();
+```
+
+## Authentication
+
+### Session Management
+
+Supabase handles session persistence automatically:
+
+```typescript
+import { supabase } from '@/lib/supabaseClient';
+
+// Check current session
+const { data: { session } } = await supabase.auth.getSession();
+
+// Listen for auth state changes
+supabase.auth.onAuthStateChange((event, session) => {
+  if (event === 'SIGNED_IN') {
+    console.log('User signed in:', session.user);
+  }
+  if (event === 'SIGNED_OUT') {
+    console.log('User signed out');
+  }
+});
+```
+
+### User Registration
+
+Create new users with metadata:
+
+```typescript
+const { data, error } = await supabase.auth.signUp({
+  email: userEmail,
+  password: userPassword,
+  options: {
+    data: {
+      first_name: firstName,
+      last_name: lastName,
+      role: 'client', // or 'lawyer'
+    },
+  },
+});
+```
+
+### Magic Link Authentication
+
+Generate passwordless login links:
+
+```typescript
+// Server-side only (uses service role key)
+const { data, error } = await supabase.auth.admin.generateLink({
+  type: 'magiclink',
+  email: userEmail,
+  options: {
+    redirectTo: `${appUrl}/dashboard/appointments`,
+  },
+});
+
+if (data?.properties?.action_link) {
+  const magicLink = data.properties.action_link;
+  // Send magicLink via email
+}
+```
+
+## Database Operations
+
+### Profile Management
+
+Create and update user profiles:
+
+```typescript
+const payload = {
+  id: userId,
+  user_id: userId,
+  email: normalizedEmail,
+  first_name: firstName,
+  last_name: lastName,
+  display_name: displayName,
+  role: 'client',
+  rut: rut || null,
+  pjud_verified: false,
+  has_used_free_consultation: false,
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+};
+
+const { data, error } = await supabase
+  .from('profiles')
+  .upsert(payload, { onConflict: 'id' })
+  .select()
+  .single();
+```
+
+### Booking Management
+
+Query bookings with relations:
+
+```typescript
+const { data: booking, error } = await supabase
+  .from('bookings')
+  .select(`
+    *,
+    lawyer:profiles!bookings_lawyer_id_fkey(
+      user_id,
+      first_name,
+      last_name,
+      specialties,
+      profile_picture_url
+    )
+  `)
+  .eq('id', bookingId)
+  .single();
+```
+
+### RPC Functions
+
+Call secure database functions that bypass RLS:
+
+```typescript
+const { data, error } = await supabase.rpc('create_payment_secure', {
+  p_id: paymentId,
+  p_amount: amount,
+  p_user_id: userId,
+  p_lawyer_id: lawyerId,
+  p_status: 'pending',
+  // ... other parameters
+});
+```
+
+## Server-Side Usage
+
+### Service Role Client
+
+For server operations that require elevated permissions:
+
+```javascript
+// server.mjs
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.VITE_SUPABASE_URL,
+  process.env.VITE_SUPABASE_SERVICE_ROLE_KEY,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  }
+);
+
+// Now you can bypass RLS
+const { data } = await supabase
+  .from('bookings')
+  .update({ status: 'confirmed' })
+  .eq('id', bookingId);
+```
+
+### Admin Operations
+
+Create users from server:
+
+```javascript
+const { data: newUser, error } = await supabase.auth.admin.createUser({
+  email: userEmail,
+  password: tempPassword,
+  email_confirm: true,
+  user_metadata: {
+    first_name: firstName,
+    last_name: lastName,
+    role: 'client',
+    signup_method: 'booking',
+  },
+});
+```
+
+## Storage
+
+### File Upload
+
+Upload files to Supabase Storage:
+
+```typescript
+const { data, error } = await supabase.storage
+  .from('profile-pictures')
+  .upload(`${userId}/${fileName}`, file, {
+    cacheControl: '3600',
+    upsert: true,
+  });
+
+if (data) {
+  const publicUrl = supabase.storage
+    .from('profile-pictures')
+    .getPublicUrl(data.path).data.publicUrl;
+}
+```
+
+## Error Handling
+
+Consistent error reporting pattern:
+
+```typescript
+import { logger } from '@/utils/logger';
+
+const reportError = (error: Error, context: string) => {
+  logger.error(`[${context}] Error occurred`, error, {
+    context,
+    environment: process.env.NODE_ENV,
+  });
+};
+
+try {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .single();
+    
+  if (error) throw error;
+} catch (error) {
+  reportError(error, 'profile-fetch');
+}
+```
+
+## Best Practices
+
+<Check>
+  - Use typed Database schema from `@/types/supabase`
+  - Enable RLS policies on all tables
+  - Use RPC functions for complex operations
+  - Never expose service role key in frontend
+  - Handle auth state changes globally
+  - Validate data before database operations
+</Check>
+
+## Type Safety
+
+Generate TypeScript types from your database schema:
+
+```bash
+npx supabase gen types typescript --project-id your-project-id > src/types/supabase.ts
+```
+
+Then import and use:
+
+```typescript
+import type { Database } from '@/types/supabase';
+
+type Profile = Database['public']['Tables']['profiles']['Row'];
+type BookingInsert = Database['public']['Tables']['bookings']['Insert'];
+```

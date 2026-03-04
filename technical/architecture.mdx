@@ -1,0 +1,279 @@
+---
+title: "System Architecture"
+description: "Overview of upLegal's technical architecture and design patterns"
+icon: "diagram-project"
+---
+
+## Architecture Overview
+
+upLegal is built as a modern full-stack web application with a client-server architecture:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Client (Browser)                         │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │   React SPA (Vite)                                    │  │
+│  │   - Component-based UI                                │  │
+│  │   - Client-side routing (React Router)                │  │
+│  │   - State management (React Query, Context API)       │  │
+│  └───────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            │ HTTPS
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Backend Services                          │
+│  ┌────────────────────┐  ┌───────────────────────────────┐  │
+│  │  Express Server    │  │  Supabase                     │  │
+│  │  (server.mjs)      │  │  - PostgreSQL Database        │  │
+│  │  - API Routes      │  │  - Authentication             │  │
+│  │  - Webhooks        │  │  - Real-time Subscriptions    │  │
+│  │  - Payment Logic   │  │  - Storage (S3-compatible)    │  │
+│  └────────────────────┘  │  - Row Level Security (RLS)   │  │
+│                          └───────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            │ External APIs
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│                  Third-Party Services                        │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────────────┐ │
+│  │ MercadoPago  │ │ Google Meet  │ │ Resend (Email)       │ │
+│  │ - Payments   │ │ - Video Call │ │ - Transactional      │ │
+│  │ - Webhooks   │ │ - Calendar   │ │ - Notifications      │ │
+│  └──────────────┘ └──────────────┘ └──────────────────────┘ │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │ PJUD (Poder Judicial)                                │   │
+│  │ - Lawyer Verification via RUT                        │   │
+│  └──────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Core Components
+
+### Frontend Layer (React SPA)
+
+The frontend is a single-page application built with React and Vite:
+
+<CardGroup cols={2}>
+  <Card title="UI Framework" icon="react">
+    - **React 18**: Component-based architecture with hooks
+    - **TypeScript**: Type-safe development
+    - **Vite**: Fast development server and optimized builds
+    - **React Router**: Client-side routing with protected routes
+  </Card>
+  
+  <Card title="State Management" icon="database">
+    - **React Query**: Server state caching and synchronization
+    - **Context API**: Auth, messages, notifications
+    - **Local State**: Component-level state with hooks
+  </Card>
+  
+  <Card title="UI Components" icon="palette">
+    - **shadcn/ui**: Radix UI primitives with Tailwind styling
+    - **Tailwind CSS**: Utility-first styling
+    - **Framer Motion**: Animations and transitions
+    - **Recharts**: Data visualization
+  </Card>
+  
+  <Card title="Forms & Validation" icon="check-square">
+    - **React Hook Form**: Form state management
+    - **Zod**: Schema validation
+    - **@hookform/resolvers**: Validation integration
+  </Card>
+</CardGroup>
+
+### Backend Layer (Express + Supabase)
+
+<Tabs>
+  <Tab title="Express Server">
+    The Express server (`server.mjs`) handles:
+    
+    - **Payment Processing**: MercadoPago preference creation and webhooks
+    - **Lawyer Verification**: PJUD RUT validation and scraping
+    - **Booking Management**: Appointment creation and confirmation
+    - **Email Notifications**: Resend integration for transactional emails
+    - **File Uploads**: Avatar and document handling
+    
+    **Key Routes**:
+    - `POST /create-payment` - Create MercadoPago payment preference
+    - `POST /api/mercadopago/webhook` - Payment confirmation webhook
+    - `POST /verify-lawyer` - PJUD lawyer verification
+    - `POST /api/bookings/create` - Create booking with payment
+  </Tab>
+  
+  <Tab title="Supabase">
+    Supabase provides:
+    
+    - **PostgreSQL Database**: Relational data storage
+    - **Authentication**: Email/password and magic link auth
+    - **Real-time**: WebSocket subscriptions for messages and notifications
+    - **Storage**: S3-compatible object storage for avatars and files
+    - **Row Level Security**: Database-level access control
+    - **Edge Functions**: Serverless functions (planned)
+    
+    **Access Patterns**:
+    - Client-side: Anonymous key with RLS policies
+    - Server-side: Service role key for admin operations
+  </Tab>
+</Tabs>
+
+### Database Architecture
+
+The database uses PostgreSQL with Supabase, organized into key tables:
+
+- **profiles**: User accounts (clients and lawyers)
+- **appointments**: Scheduled consultations
+- **bookings**: Payment-linked appointment records
+- **consultations**: Service requests and cases
+- **messages**: Real-time chat messages
+- **conversations**: Message threads
+- **notifications**: In-app notification queue
+- **reviews**: Client reviews and ratings
+- **payments**: Payment transaction records
+- **lawyer_services**: Lawyer-offered legal services
+
+See [Database Schema](/technical/database-schema) for detailed table structures.
+
+## Design Patterns
+
+### Authentication Flow
+
+```typescript
+// Client authenticates via Supabase Auth
+const { data, error } = await supabase.auth.signInWithPassword({
+  email,
+  password
+})
+
+// Session stored in localStorage
+// RLS policies enforce data access based on auth.uid()
+```
+
+<Warning>
+All database queries use Row Level Security (RLS) policies. The client uses the anonymous key, which only grants access to data the authenticated user owns or is authorized to view.
+</Warning>
+
+### Real-time Subscriptions
+
+upLegal uses Supabase real-time channels for live updates:
+
+```typescript
+// Subscribe to new messages in a conversation
+supabase
+  .channel(`conversation:${conversationId}`)
+  .on(
+    'postgres_changes',
+    {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'messages',
+      filter: `conversation_id=eq.${conversationId}`
+    },
+    (payload) => {
+      // Handle new message
+      addMessage(payload.new)
+    }
+  )
+  .subscribe()
+```
+
+### Payment Flow
+
+1. Client selects lawyer and time slot
+2. Frontend calls `POST /create-payment` on Express server
+3. Server creates MercadoPago preference with 10% platform fee
+4. Client redirected to MercadoPago checkout
+5. MercadoPago sends webhook to `POST /api/mercadopago/webhook`
+6. Server confirms booking and sends email notifications
+7. Appointment record created in database
+
+### Deployment Architecture
+
+<CardGroup cols={2}>
+  <Card title="Frontend Deployment" icon="cloud">
+    **Netlify**
+    - Static site hosting
+    - Automatic deployments from Git
+    - CDN distribution
+    - Serverless redirects
+  </Card>
+  
+  <Card title="Backend Deployment" icon="server">
+    **Render**
+    - Express server hosting
+    - Environment variables
+    - Health check endpoint
+    - Auto-scaling
+  </Card>
+</CardGroup>
+
+## Security Measures
+
+<AccordionGroup>
+  <Accordion title="Row Level Security (RLS)">
+    Every database table has RLS policies that restrict access:
+    - Users can only read/write their own profile
+    - Lawyers can only see their own appointments
+    - Messages are visible only to conversation participants
+    - Admin operations require service role key
+  </Accordion>
+  
+  <Accordion title="API Authentication">
+    - Supabase JWT tokens for authenticated requests
+    - Service role key for server-side operations
+    - CORS whitelist for allowed origins
+    - Request validation and sanitization
+  </Accordion>
+  
+  <Accordion title="Payment Security">
+    - MercadoPago handles all sensitive payment data
+    - No credit card information stored in database
+    - Webhook signature verification
+    - Payment reconciliation for failed webhooks
+  </Accordion>
+  
+  <Accordion title="Data Privacy">
+    - User emails and phone numbers are private
+    - File uploads scoped to authenticated users
+    - Message encryption in transit (TLS)
+    - GDPR-compliant data handling
+  </Accordion>
+</AccordionGroup>
+
+## Performance Optimizations
+
+- **Code Splitting**: React lazy loading for routes
+- **Image Optimization**: Supabase Storage CDN
+- **Database Indexing**: Indexed foreign keys and search fields
+- **Query Optimization**: React Query caching reduces API calls
+- **Infinite Scroll**: Virtual scrolling for large lists
+- **Debouncing**: Search input debouncing (300ms)
+
+## Monitoring & Logging
+
+- **Google Analytics**: User behavior tracking
+- **Payment Logging**: Custom payment event logger
+- **Error Logging**: Error boundary for React crashes
+- **Server Logs**: Express logging for API requests
+- **Health Checks**: `/health` endpoint for uptime monitoring
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Tech Stack Details" icon="layer-group" href="/technical/tech-stack">
+    Explore the complete technology stack
+  </Card>
+  
+  <Card title="Database Schema" icon="database" href="/technical/database-schema">
+    Detailed database table structures
+  </Card>
+  
+  <Card title="Local Setup" icon="code" href="/technical/local-setup">
+    Set up upLegal for local development
+  </Card>
+  
+  <Card title="Deployment Guide" icon="rocket" href="/technical/deployment">
+    Deploy upLegal to production
+  </Card>
+</CardGroup>

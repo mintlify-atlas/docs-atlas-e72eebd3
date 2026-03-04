@@ -1,0 +1,157 @@
+---
+title: 'Lawyer Onboarding'
+description: 'Complete guide to signing up and getting started as a lawyer on upLegal'
+icon: 'user-plus'
+---
+
+## Overview
+
+Becoming a lawyer on upLegal involves account creation, profile verification, and completing your professional profile. The platform requires verification through Chile's Poder Judicial (PJUD) system to ensure lawyer authenticity.
+
+## Sign Up Process
+
+<Steps>
+  <Step title="Create Account">
+    Lawyers sign up using email and password through Supabase Auth:
+    
+    ```typescript
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          first_name,
+          last_name,
+          role: 'lawyer'
+        }
+      }
+    })
+    ```
+    
+    The `role` field in user metadata determines access to lawyer-specific features.
+  </Step>
+
+  <Step title="Email Verification">
+    Verify your email address through the confirmation link sent to your inbox. This is required before accessing the lawyer dashboard.
+  </Step>
+
+  <Step title="Initial Profile Setup">
+    After verification, you'll be directed to complete your basic profile:
+    - First name and last name
+    - Phone number
+    - Location
+    - Professional bio
+  </Step>
+
+  <Step title="RUT Verification">
+    Enter your Chilean RUT (Rol Único Tributario) for verification through PJUD.
+    
+    <Note>
+      RUT verification is performed through the Poder Judicial's public API at `https://www.pjud.cl/ajax/Lawyers/search`
+    </Note>
+  </Step>
+</Steps>
+
+## Profile Completion Requirements
+
+The platform tracks profile completion percentage to improve visibility. A complete profile includes:
+
+### Personal Information (20%)
+- ✅ Full name
+- ✅ Professional photo/avatar
+- ✅ Phone number
+- ✅ Location
+- ✅ Professional bio (minimum 50 characters recommended)
+
+### Professional Details (30%)
+- ✅ RUT verification with PJUD
+- ✅ Years of experience
+- ✅ At least one specialization selected
+- ✅ Education details (degree, university, years)
+- ✅ Bar association number (optional)
+
+### Rates & Availability (20%)
+- ✅ Hourly rate set (in CLP)
+- ✅ Contact fee configured
+- ✅ Weekly availability calendar configured
+
+### Services & Integration (30%)
+- ✅ At least one service created
+- ✅ MercadoPago account connected for payments
+- ✅ Professional document uploaded
+
+## Dashboard Navigation
+
+After onboarding, you'll have access to the lawyer dashboard with these main sections:
+
+<CardGroup cols={2}>
+  <Card title="Profile" icon="user">
+    Manage your personal and professional information
+  </Card>
+  <Card title="Services" icon="briefcase">
+    Create and manage your legal service offerings
+  </Card>
+  <Card title="Appointments" icon="calendar">
+    View and manage client consultations
+  </Card>
+  <Card title="Earnings" icon="dollar-sign">
+    Track income and view payout history
+  </Card>
+</CardGroup>
+
+## Initial Setup Checklist
+
+<AccordionGroup>
+  <Accordion title="Complete Your Profile">
+    Navigate to **Profile** → Fill in all required fields → Save changes
+    
+    Profile completion is shown at the top of your dashboard with a progress bar.
+  </Accordion>
+
+  <Accordion title="Verify with PJUD">
+    1. Enter your RUT in format `12.345.678-9`
+    2. Click "Verificar" button
+    3. System validates against Poder Judicial database
+    4. Green checkmark indicates successful verification
+    
+    The verification status is stored in `profiles.pjud_verified`.
+  </Accordion>
+
+  <Accordion title="Set Your Availability">
+    Click **Gestionar disponibilidad** → Select available hours on the weekly grid → Save
+    
+    - Grid shows Monday-Sunday, 09:00-20:00
+    - Sunday is disabled (Chilean legal practice standards)
+    - Saturday hours limited to 09:00-15:00
+  </Accordion>
+
+  <Accordion title="Connect Payment Method">
+    Go to **Earnings** → Connect MercadoPago account → Authorize connection
+    
+    You'll receive 80% of payments directly to your MercadoPago account.
+  </Accordion>
+</AccordionGroup>
+
+## Profile States
+
+Your profile can be in different states:
+
+| State | Description | Client Visibility |
+|-------|-------------|------------------|
+| **Incomplete** | < 70% profile completion | Not visible in search |
+| **Pending Verification** | Profile complete but RUT not verified | Limited visibility |
+| **Verified** | PJUD verified + complete profile | Full visibility |
+| **Active** | Verified + availability set + service created | Bookable |
+
+<Warning>
+  Profiles below 70% completion are not shown to clients in the lawyer marketplace.
+</Warning>
+
+## Next Steps
+
+Once your profile is set up:
+
+1. [Configure your profile details](/lawyers/profile-setup)
+2. [Set up your availability](/lawyers/availability)
+3. [Create your first service](/lawyers/services)
+4. [Connect payment processing](/lawyers/earnings-payouts)

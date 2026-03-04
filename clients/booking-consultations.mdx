@@ -1,0 +1,378 @@
+---
+title: Booking Consultations
+description: Complete guide to the appointment booking flow, from selecting time slots to payment confirmation
+---
+
+upLegal's booking system lets clients schedule video consultations with verified lawyers. The process includes duration selection, availability checking, and secure payment processing.
+
+## Booking Flow
+
+<Steps>
+  <Step title="Select Lawyer">
+    Navigate to a lawyer's profile or click "Agendar" from search results. You'll see:
+    - Lawyer's photo, name, and PJUD verification badge
+    - Specialties displayed as badges
+    - Bio snippet
+  </Step>
+  
+  <Step title="Choose Duration">
+    Select consultation length from 4 options:
+    
+    | Duration | Price Calculation |
+    |----------|------------------|
+    | 30 min   | 50% of hourly rate |
+    | 60 min   | 100% of hourly rate (base) |
+    | 90 min   | 150% of hourly rate |
+    | 120 min  | 200% of hourly rate |
+    
+    <Info>
+      Longer consultations provide more time for complex legal matters and are charged proportionally.
+    </Info>
+  </Step>
+  
+  <Step title="Pick a Date">
+    Choose from available dates in the next 30 days:
+    - **Excluded days**: Sundays and Chilean public holidays
+    - **Lawyer availability**: Only dates where the lawyer has configured availability
+    - **3-column grid**: Shows day of week, date, and month
+    
+    Dates are dynamically filtered based on the lawyer's availability configuration.
+  </Step>
+  
+  <Step title="Select Time Slot">
+    After selecting a date, available time slots appear:
+    
+    **Default Hours**
+    - Monday-Friday: 9:00 AM - 6:00 PM
+    - Saturday: 9:00 AM - 2:00 PM
+    
+    **Slot Display**
+    - Available slots: White background, clickable
+    - Booked slots: Gray background, disabled
+    - Selected slot: Blue background
+    
+    <Note>
+      For same-day bookings, only slots at least 15 minutes in the future are available.
+    </Note>
+  </Step>
+  
+  <Step title="Review Summary">
+    Before proceeding to payment, review:
+    - **Date**: Full date in Spanish format
+    - **Time**: Selected time slot
+    - **Duration**: Consultation length in minutes
+    - **Lawyer fees**: Base consultation price
+    - **Service fee**: 10% platform charge
+    - **Total**: Final amount in CLP
+  </Step>
+  
+  <Step title="Complete Checkout">
+    Two checkout flows depending on authentication:
+    
+    **Authenticated Users**
+    - Auto-filled name and email
+    - Direct redirect to MercadoPago
+    
+    **Guest Users**
+    - Pre-checkout modal appears
+    - Enter name and email
+    - Email validation required
+    - Then redirect to MercadoPago
+  </Step>
+</Steps>
+
+## Availability System
+
+### Lawyer-Controlled Availability
+
+Lawyers configure their weekly availability in the dashboard:
+
+```typescript
+// src/pages/BookingPage.tsx:125-157
+const AVAILABILITY_START_HOUR = 9;
+
+const getDayName = (date: Date) => {
+  const days = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+  return days[date.getDay()];
+};
+```
+
+Each day has hourly slots from 9 AM to 6 PM (9 AM to 2 PM on Saturdays). Lawyers can enable/disable specific hours for each day.
+
+### Real-Time Availability Check
+
+The system checks multiple factors before showing a time slot:
+
+<Tabs>
+  <Tab title="Lawyer Schedule">
+    Compares selected date against the lawyer's configured availability JSON. Only hours marked as available are shown.
+    
+    ```typescript
+    // src/pages/BookingPage.tsx:263-277
+    const configFilteredSlots = baseSlots.filter(slot => {
+      const hour = parseInt(slot.time.split(':')[0]);
+      const hourIndex = hour - AVAILABILITY_START_HOUR;
+
+      if (dayAvailability && Array.isArray(dayAvailability)) {
+        return dayAvailability[hourIndex] === true;
+      }
+
+      if (hasCustomAvailability) {
+        return false; // Block if config exists but day not set
+      }
+
+      return true; // Default to open if no config
+    });
+    ```
+  </Tab>
+  
+  <Tab title="Existing Bookings">
+    Calls `get_lawyer_busy_slots` RPC function to fetch booked appointments:
+    
+    ```typescript
+    // src/pages/BookingPage.tsx:210-214
+    const { data: busySlots, error } = await supabase
+      .rpc('get_lawyer_busy_slots', {
+        query_lawyer_id: actualLawyerId,
+        query_date: format(selectedDate, 'yyyy-MM-dd')
+      });
+    ```
+    
+    Blocks slots that conflict with existing appointments.
+  </Tab>
+  
+  <Tab title="Collision Detection">
+    Prevents overlapping appointments by checking if new booking would conflict:
+    
+    ```typescript
+    // src/pages/BookingPage.tsx:286-298
+    const isBlocked = bookedTimes.some((booked) => {
+      const bookedStart = parseInt(booked.time.replace(':', ''));
+      const bookedEnd = addMinutesToTime(bookedStart, booked.duration);
+
+      // Check overlap: (StartA < EndB) and (EndA > StartB)
+      return (slotTimeVal < bookedEnd) && (slotEndVal > bookedStart);
+    });
+    ```
+  </Tab>
+  
+  <Tab title="Same-Day Cutoff">
+    For bookings on the current day, only future slots (15+ min ahead) are shown:
+    
+    ```typescript
+    // src/pages/BookingPage.tsx:190-204
+    const cutoff = new Date(now.getTime() + 15 * 60 * 1000);
+
+    return slots.filter((slot) => {
+      const [slotHour, slotMinute] = slot.time.split(':').map(Number);
+      const slotDateTime = new Date(selectedDate);
+      slotDateTime.setHours(slotHour, slotMinute, 0, 0);
+      return slotDateTime.getTime() >= cutoff.getTime();
+    });
+    ```
+  </Tab>
+</Tabs>
+
+## Pre-Checkout Modal
+
+For users not logged in, a modal collects essential information:
+
+**Required Fields**
+- **Full Name**: Client's complete name
+- **Email**: Valid email address (validated with regex)
+
+**Booking Summary Display**
+- Lawyer name
+- Duration in minutes
+- Total price in CLP
+- Refund guarantee if lawyer doesn't attend
+
+```typescript
+// src/components/PreCheckoutModal.tsx:44-52
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+if (!emailRegex.test(email)) {
+  toast({
+    title: 'Email inválido',
+    description: 'Por favor ingresa un email válido',
+    variant: 'destructive'
+  });
+  return;
+}
+```
+
+<Warning>
+  The time slot is **not reserved** during the booking process. It's only locked when payment is initiated.
+</Warning>
+
+## Payment Processing
+
+### Creating the Booking
+
+Both authenticated and guest users follow the same API flow:
+
+```typescript
+// src/pages/BookingPage.tsx:354-368
+const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/bookings/create`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    lawyer_id: lawyer.user_id,
+    user_email: userEmail,
+    user_name: userName,
+    scheduled_date: format(selectedDate, 'yyyy-MM-dd'),
+    scheduled_time: selectedTime,
+    duration,
+    price: totalPrice
+  })
+});
+```
+
+### Analytics Tracking
+
+The system tracks multiple events:
+
+1. **booking_start**: When booking page loads
+2. **time_selected**: When user picks a time slot
+3. **lead_created**: When booking is created (before payment)
+4. **begin_checkout**: When redirecting to MercadoPago
+
+```typescript
+// src/pages/BookingPage.tsx:399-411
+if (window.gtag) {
+  window.gtag('event', 'begin_checkout', {
+    booking_id: data.booking_id,
+    value: totalPrice,
+    currency: 'CLP',
+    items: [{
+      item_id: data.booking_id,
+      item_name: `Asesoría con ${lawyer.first_name} ${lawyer.last_name}`,
+      price: totalPrice,
+      quantity: 1
+    }]
+  });
+}
+```
+
+### MercadoPago Redirect
+
+After booking creation, clients are redirected to MercadoPago:
+
+```typescript
+// src/pages/BookingPage.tsx:385-416
+if (data.payment_link) {
+  // Log payment started event
+  await logPaymentEvent({
+    event_type: 'started',
+    user_id: user?.id,
+    appointment_id: data.booking_id,
+    amount: totalPrice,
+    metadata: {
+      lawyer_id: lawyer.user_id,
+      duration,
+      source: 'BookingPage'
+    }
+  });
+
+  window.location.href = data.payment_link;
+}
+```
+
+## Price Breakdown
+
+The booking summary shows transparent pricing:
+
+**Example: 60-minute consultation with lawyer charging $50,000 CLP/hour**
+
+| Item | Amount |
+|------|--------|
+| Lawyer fees | $50,000 |
+| Service fee (10%) | $5,000 |
+| **Total** | **$55,000** |
+
+<Info>
+  The 10% service fee covers platform maintenance, payment processing, and customer support.
+</Info>
+
+## Loading States
+
+### Skeleton Screens
+
+While loading lawyer data, skeleton screens show:
+- Lawyer info card placeholder
+- Duration selection placeholders (4 options)
+- Date picker grid (6 cells)
+- Time picker grid (6 cells)
+
+### Time Slots Loading
+
+When changing dates or duration:
+- Spinner shown in time picker area
+- Existing slots remain visible but disabled
+- New slots loaded asynchronously
+
+## Error Handling
+
+<Tabs>
+  <Tab title="Lawyer Not Found">
+    If lawyer ID is invalid or lawyer is deleted:
+    ```typescript
+    // src/pages/BookingPage.tsx:76-88
+    if (error.code !== 'PGRST116') {
+      navigate('/search');
+    }
+    ```
+    Automatically redirects to search page.
+  </Tab>
+  
+  <Tab title="No Available Slots">
+    If selected date has no availability:
+    - Clock icon with message
+    - "No hay horas disponibles"
+    - Suggestion to try another date
+  </Tab>
+  
+  <Tab title="Booking Creation Failed">
+    If API returns error:
+    - Toast notification with error message
+    - Payment processing state reset
+    - User can retry
+  </Tab>
+  
+  <Tab title="Missing Email (Authenticated Users)">
+    ```typescript
+    // src/pages/BookingPage.tsx:467-475
+    if (!user.email) {
+      toast({
+        title: 'Cuenta sin email',
+        description: 'Tu cuenta no tiene un email válido...',
+        variant: 'destructive'
+      });
+      setShowPreCheckout(true);
+      return;
+    }
+    ```
+    Shows pre-checkout modal even for logged-in users.
+  </Tab>
+</Tabs>
+
+## Mobile Responsiveness
+
+- **Duration cards**: 2 columns on mobile, 4 on desktop
+- **Date picker**: 3 columns always (compact)
+- **Time picker**: 2 columns always
+- **Pre-checkout modal**: Full-screen on mobile, centered dialog on desktop
+
+## Next Steps
+
+After clicking "Continuar al pago" or "Confirmar y pagar asesoría":
+
+<CardGroup cols={2}>
+  <Card title="Payment" icon="credit-card" href="/clients/payments">
+    Complete payment through MercadoPago
+  </Card>
+  <Card title="Confirmation" icon="check" href="#">
+    Receive email confirmation and calendar invite
+  </Card>
+</CardGroup>

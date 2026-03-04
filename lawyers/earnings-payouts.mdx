@@ -1,0 +1,546 @@
+---
+title: 'Earnings & Payouts'
+description: 'Track earnings, view transaction history, and manage MercadoPago payouts'
+icon: 'dollar-sign'
+---
+
+## Overview
+
+The earnings system tracks your income from consultations and services, manages payouts through MercadoPago, and provides detailed transaction reports. Access via `/lawyer/earnings`.
+
+## Payment Flow
+
+When a client books an appointment:
+
+1. **Client pays** via MercadoPago
+2. **Platform fee** (20%) is deducted
+3. **Lawyer receives** 80% directly to connected MercadoPago account
+4. **Transaction recorded** in `payments` table
+
+```typescript
+interface Transaction {
+  id: string
+  date: Date
+  clientName: string
+  service: string
+  amount: number  // In CLP
+  status: 'completed' | 'pending' | 'refunded' | 'failed'
+  type: 'consultation' | 'service' | 'subscription' | 'other'
+}
+```
+
+## MercadoPago Integration
+
+### Connecting Your Account
+
+<Steps>
+  <Step title="Navigate to Earnings Page">
+    Go to your lawyer dashboard and click on the **Ganancias** section.
+  </Step>
+
+  <Step title="Connect MercadoPago">
+    Click **Conectar con MercadoPago** button:
+    
+    ```typescript
+    const handleConnect = async () => {
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+      
+      // Request OAuth URL from backend
+      const response = await fetch(`${API_BASE_URL}/api/mercadopago/auth-url`)
+      const { url } = await response.json()
+      
+      // Redirect to MercadoPago OAuth
+      window.location.href = url
+    }
+    ```
+  </Step>
+
+  <Step title="Authorize in MercadoPago">
+    You'll be redirected to MercadoPago's authorization page to:
+    - Log in to your MercadoPago account
+    - Review permissions requested
+    - Authorize upLegal to process payments
+  </Step>
+
+  <Step title="Complete Connection">
+    After authorization, you're redirected back with OAuth tokens:
+    
+    ```typescript
+    // OAuth callback parameters
+    const params = {
+      mp_user_id: string,
+      mp_access_token: string,
+      mp_refresh_token: string,
+      mp_public_key: string,
+      mp_email: string,
+      mp_nickname: string,
+      mp_expires_at: string
+    }
+    
+    // Save to database
+    await saveAccount({
+      userId: user.id,
+      mercadopagoUserId: params.mp_user_id,
+      accessToken: params.mp_access_token,
+      refreshToken: params.mp_refresh_token,
+      publicKey: params.mp_public_key,
+      email: params.mp_email,
+      expiresAt: params.mp_expires_at
+    })
+    ```
+  </Step>
+</Steps>
+
+### Account Status Display
+
+Once connected, your MercadoPago account status is shown:
+
+```typescript
+<Card>
+  <CardHeader>
+    <CardTitle className="flex items-center gap-2">
+      MercadoPago
+      {isConnected && <CheckCircle className="text-green-600" />}
+    </CardTitle>
+  </CardHeader>
+  <CardContent>
+    {isConnected ? (
+      <Alert>
+        <CheckCircle className="h-4 w-4" />
+        <AlertDescription>
+          Cuenta conectada: <strong>{account.email}</strong>
+          {account.nickname && ` (@${account.nickname})`}
+        </AlertDescription>
+      </Alert>
+    ) : (
+      <Alert>
+        <AlertDescription>
+          Conecta tu cuenta de MercadoPago para recibir el 80% de los pagos directamente.
+        </AlertDescription>
+      </Alert>
+    )}
+  </CardContent>
+</Card>
+```
+
+<Note>
+  Your MercadoPago connection data is stored in the `mercadopago_accounts` table linked to your `user_id`.
+</Note>
+
+### Disconnecting Account
+
+To disconnect your MercadoPago account:
+
+```typescript
+const handleDisconnect = async () => {
+  const response = await fetch(
+    `${API_BASE_URL}/api/mercadopago/disconnect/${user.id}`,
+    { method: 'DELETE' }
+  )
+  
+  if (response.ok) {
+    setIsConnected(false)
+    setAccount(null)
+    toast({
+      title: 'Cuenta desconectada',
+      description: 'Tu cuenta de MercadoPago ha sido desconectada.'
+    })
+  }
+}
+```
+
+<Warning>
+  Disconnecting stops automatic payouts. New earnings will be held until you reconnect.
+</Warning>
+
+## Earnings Dashboard
+
+### Summary Cards
+
+The earnings page displays four key metrics:
+
+```typescript
+const { total, completed, pending } = calculateEarnings(filteredTransactions)
+
+<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+  {/* Total Income */}
+  <Card>
+    <CardTitle>Ingresos Totales</CardTitle>
+    <div className="text-2xl font-bold">
+      {formatCurrency(total)}
+    </div>
+  </Card>
+  
+  {/* Completed Payments */}
+  <Card>
+    <CardTitle>Ingresos Cobrados</CardTitle>
+    <div className="text-2xl font-bold text-green-600">
+      {formatCurrency(completed)}
+    </div>
+  </Card>
+  
+  {/* Pending Payments */}
+  <Card>
+    <CardTitle>Pendientes de Pago</CardTitle>
+    <div className="text-2xl font-bold text-yellow-600">
+      {formatCurrency(pending)}
+    </div>
+  </Card>
+  
+  {/* Transaction Count */}
+  <Card>
+    <CardTitle>Transacciones</CardTitle>
+    <div className="text-2xl font-bold">
+      {filteredTransactions.filter(tx => tx.status === 'completed').length}
+    </div>
+  </Card>
+</div>
+```
+
+### Currency Formatting
+
+All amounts are displayed in Chilean Pesos (CLP):
+
+```typescript
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat('es-CL', {
+    style: 'currency',
+    currency: 'CLP',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(amount)
+}
+
+// Example: 50000 → "$50.000"
+```
+
+## Transaction History
+
+### Fetching Transactions
+
+Transactions are fetched from the database with client details:
+
+```typescript
+const fetchTransactions = async () => {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) return
+  
+  // 1. Fetch payments
+  const { data: payments } = await supabase
+    .from('payments')
+    .select(`
+      id,
+      amount,
+      status,
+      created_at,
+      appointment_id,
+      lawyer_id
+    `)
+    .eq('lawyer_id', session.user.id)
+    .order('created_at', { ascending: false })
+  
+  // 2. Get appointment IDs
+  const appointmentIds = [...new Set(
+    payments.map(p => p.appointment_id).filter(id => id)
+  )]
+  
+  // 3. Fetch appointments with client details
+  const { data: appointments } = await supabase
+    .from('appointments')
+    .select(`
+      id,
+      service_type,
+      client:profiles!appointments_client_id_fkey (
+        first_name,
+        last_name
+      )
+    `)
+    .in('id', appointmentIds)
+  
+  // 4. Build lookup map
+  const appointmentsMap = new Map()
+  appointments?.forEach(app => {
+    appointmentsMap.set(app.id, app)
+  })
+  
+  // 5. Format transactions
+  const formatted = payments
+    .filter(payment => payment.amount > 0)  // Exclude test payments
+    .map(payment => {
+      const appointment = appointmentsMap.get(payment.appointment_id)
+      return {
+        id: payment.id,
+        date: new Date(payment.created_at),
+        clientName: appointment?.client 
+          ? `${appointment.client.first_name} ${appointment.client.last_name}`.trim()
+          : 'Cliente',
+        service: appointment?.service_type || 'Consulta',
+        amount: payment.amount,
+        status: payment.status,
+        type: 'consultation'
+      }
+    })
+  
+  setTransactions(formatted)
+}
+```
+
+### Time Range Filters
+
+Filter transactions by time period:
+
+```typescript
+type TimeRange = 'week' | 'month' | 'year' | 'all'
+
+const getFilteredTransactions = () => {
+  const now = new Date()
+  let startDate: Date
+  
+  switch (timeRange) {
+    case 'week':
+      startDate = new Date()
+      startDate.setDate(now.getDate() - 7)
+      break
+    case 'month':
+      startDate = startOfMonth(now)
+      break
+    case 'year':
+      startDate = new Date(selectedYear, 0, 1)
+      break
+    case 'all':
+    default:
+      return transactions
+  }
+  
+  return transactions.filter(tx => 
+    isWithinInterval(tx.date, { start: startDate, end: now })
+  )
+}
+
+<Tabs value={timeRange} onValueChange={setTimeRange}>
+  <TabsList>
+    <TabsTrigger value="week">Esta semana</TabsTrigger>
+    <TabsTrigger value="month">Este mes</TabsTrigger>
+    <TabsTrigger value="year">Este año</TabsTrigger>
+    <TabsTrigger value="all">Todo</TabsTrigger>
+  </TabsList>
+</Tabs>
+```
+
+### Transaction Status Icons
+
+```typescript
+const getStatusColor = (status: string) => {
+  switch (status) {
+    case 'completed':
+      return 'bg-green-100 text-green-800'
+    case 'pending':
+      return 'bg-yellow-100 text-yellow-800'
+    case 'refunded':
+      return 'bg-blue-100 text-blue-800'
+    case 'failed':
+      return 'bg-red-100 text-red-800'
+    default:
+      return 'bg-gray-100 text-gray-800'
+  }
+}
+
+// Status badge display
+<span className={getStatusColor(transaction.status)}>
+  {transaction.status === 'completed' ? (
+    <>
+      <CheckCircle2 className="h-3.5 w-3.5" />
+      <span>Completado</span>
+    </>
+  ) : transaction.status === 'pending' ? (
+    <>
+      <Clock4 className="h-3.5 w-3.5" />
+      <span>Pendiente</span>
+    </>
+  ) : transaction.status === 'refunded' ? (
+    <>
+      <Undo2 className="h-3.5 w-3.5" />
+      <span>Reembolsado</span>
+    </>
+  ) : (
+    <>
+      <XCircle className="h-3.5 w-3.5" />
+      <span>Fallido</span>
+    </>
+  )}
+</span>
+```
+
+## Monthly Earnings Chart
+
+When viewing "Este año", a monthly breakdown is displayed:
+
+```typescript
+const getMonthlyEarnings = () => {
+  return Array.from({ length: 12 }, (_, i) => {
+    const monthStart = new Date(selectedYear, i, 1)
+    const monthEnd = endOfMonth(monthStart)
+    
+    // Filter transactions for this month
+    const monthlyTransactions = transactions.filter(tx => {
+      const txDate = new Date(tx.date)
+      return (
+        txDate.getFullYear() === selectedYear &&
+        txDate.getMonth() === i &&
+        (tx.status === 'completed' || tx.status === 'pending')
+      )
+    })
+    
+    // Calculate total
+    const earnings = monthlyTransactions.reduce(
+      (sum, tx) => sum + tx.amount, 
+      0
+    )
+    
+    return {
+      month: i,
+      earnings,
+      transactionCount: monthlyTransactions.length
+    }
+  })
+}
+
+// Display as progress bars
+const monthNames = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+]
+
+{monthlyEarnings.map(({ month, earnings }) => (
+  <div key={month}>
+    <div className="flex items-center justify-between">
+      <span>{monthNames[month]}</span>
+      <span>{formatCurrency(earnings)}</span>
+    </div>
+    <Progress 
+      value={(earnings / maxEarnings) * 100} 
+      className="h-2" 
+    />
+  </div>
+))}
+```
+
+## Top Services Report
+
+Analyze your most profitable services:
+
+```typescript
+const getTopServices = () => {
+  // Group by service
+  const serviceStats = transactions
+    .filter(tx => tx.status === 'completed')
+    .reduce((acc, tx) => {
+      const serviceName = tx.service || 'Sin categoría'
+      const service = acc.get(serviceName) || { count: 0, amount: 0 }
+      
+      return acc.set(serviceName, {
+        count: service.count + 1,
+        amount: service.amount + tx.amount
+      })
+    }, new Map())
+  
+  // Sort by revenue
+  return Array.from(serviceStats.entries())
+    .map(([service, data]) => ({
+      service,
+      count: data.count,
+      amount: data.amount,
+      percentage: completed > 0 ? (data.amount / completed) * 100 : 0
+    }))
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 5)  // Top 5
+}
+
+<Card>
+  <CardTitle>Servicios Populares</CardTitle>
+  <div className="space-y-4">
+    {topServices.map(({ service, amount, count, percentage }) => (
+      <div key={service}>
+        <div className="flex justify-between">
+          <span>{service}</span>
+          <span>{formatCurrency(amount)}</span>
+        </div>
+        <div className="text-xs text-muted-foreground">
+          {count} transacciones • {percentage.toFixed(1)}% del total
+        </div>
+        <Progress value={percentage} className="h-1.5" />
+      </div>
+    ))}
+  </div>
+</Card>
+```
+
+## Export Functionality
+
+Export transaction history to CSV:
+
+```typescript
+const handleExport = () => {
+  const csv = [
+    ['Fecha', 'Cliente', 'Servicio', 'Monto', 'Estado'].join(','),
+    ...filteredTransactions.map(tx => [
+      format(tx.date, 'yyyy-MM-dd HH:mm'),
+      tx.clientName,
+      tx.service,
+      tx.amount,
+      tx.status
+    ].join(','))
+  ].join('\n')
+  
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const url = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `earnings-${format(new Date(), 'yyyy-MM-dd')}.csv`
+  a.click()
+}
+
+<Button variant="outline" onClick={handleExport}>
+  <Download className="h-4 w-4 mr-2" />
+  Exportar
+</Button>
+```
+
+## Payout Schedule
+
+<Note>
+  **80/20 Split**: For each payment, upLegal retains 20% as platform fee and you receive 80% directly to your MercadoPago account.
+</Note>
+
+| Payment Status | Payout Timing | MercadoPago Fee |
+|----------------|---------------|------------------|
+| **Completed** | Instant | ~2.9% + CLP 150 |
+| **Pending** | 24-48 hours | ~2.9% + CLP 150 |
+| **Refunded** | Deducted from next payout | N/A |
+
+<Warning>
+  MercadoPago charges its own transaction fees (typically 2.9% + CLP 150 per transaction) which are separate from the upLegal platform fee.
+</Warning>
+
+## Earnings Calculations
+
+```typescript
+// Calculate earnings summary
+const calculateEarnings = (transactions: Transaction[]) => {
+  return transactions.reduce((acc, tx) => {
+    acc.total += tx.amount
+    
+    if (tx.status === 'completed') {
+      acc.completed += tx.amount
+    } else if (tx.status === 'pending') {
+      acc.pending += tx.amount
+    }
+    
+    return acc
+  }, { 
+    total: 0, 
+    completed: 0, 
+    pending: 0 
+  })
+}
+```

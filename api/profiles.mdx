@@ -1,0 +1,373 @@
+---
+title: Profiles
+description: Profile management API for upLegal users
+icon: user
+---
+
+# Profile Management API
+
+Manage user profiles for both clients and lawyers in upLegal.
+
+## Create Profile
+
+<Note>
+Profiles are automatically created during signup, but this endpoint can be used to ensure profile creation or update during edge cases.
+</Note>
+
+**Endpoint:** `POST /api/profiles`
+
+**Authentication:** Service role key required (server-side only)
+
+### Request Body
+
+<ParamField path="userId" type="string" required>
+  User ID from Supabase Auth
+</ParamField>
+
+<ParamField path="email" type="string" required>
+  User email address (normalized to lowercase)
+</ParamField>
+
+<ParamField path="role" type="string" required>
+  User role: `client` or `lawyer`
+</ParamField>
+
+<ParamField path="firstName" type="string">
+  User's first name
+</ParamField>
+
+<ParamField path="lastName" type="string">
+  User's last name
+</ParamField>
+
+<ParamField path="displayName" type="string">
+  Display name (defaults to firstName + lastName or email prefix)
+</ParamField>
+
+<ParamField path="rut" type="string">
+  Chilean RUT (for lawyers, must be verified)
+</ParamField>
+
+<ParamField path="pjudVerified" type="boolean">
+  Whether the lawyer is verified by Poder Judicial
+</ParamField>
+
+### Example Request
+
+```json
+{
+  "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "email": "abogado@example.com",
+  "firstName": "María",
+  "lastName": "González",
+  "role": "lawyer",
+  "rut": "12345678-9",
+  "pjudVerified": true
+}
+```
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Operation success status
+</ResponseField>
+
+<ResponseField name="profile" type="object">
+  Created or updated profile data
+  
+  <ResponseField name="id" type="string">
+    Profile ID (same as user_id)
+  </ResponseField>
+  
+  <ResponseField name="user_id" type="string">
+    Associated user ID
+  </ResponseField>
+  
+  <ResponseField name="email" type="string">
+    User email
+  </ResponseField>
+  
+  <ResponseField name="first_name" type="string | null">
+    First name
+  </ResponseField>
+  
+  <ResponseField name="last_name" type="string | null">
+    Last name
+  </ResponseField>
+  
+  <ResponseField name="display_name" type="string">
+    Display name
+  </ResponseField>
+  
+  <ResponseField name="role" type="string">
+    User role (client or lawyer)
+  </ResponseField>
+  
+  <ResponseField name="rut" type="string | null">
+    Chilean RUT
+  </ResponseField>
+  
+  <ResponseField name="pjud_verified" type="boolean">
+    Poder Judicial verification status
+  </ResponseField>
+  
+  <ResponseField name="has_used_free_consultation" type="boolean">
+    Whether user has used their free consultation
+  </ResponseField>
+  
+  <ResponseField name="created_at" type="string">
+    ISO 8601 timestamp
+  </ResponseField>
+  
+  <ResponseField name="updated_at" type="string">
+    ISO 8601 timestamp
+  </ResponseField>
+</ResponseField>
+
+### Error Responses
+
+```json 400 - Missing Fields
+{
+  "error": "Missing required fields: userId, email and role."
+}
+```
+
+```json 500 - Database Error
+{
+  "error": "No se pudo guardar el perfil del usuario."
+}
+```
+
+## Verify RUT
+
+**Endpoint:** `POST /verify-rut`
+
+**Authentication:** Not required (public endpoint)
+
+Validates Chilean RUT format and verifier digit.
+
+### Request Body
+
+<ParamField path="rut" type="string" required>
+  RUT to validate (format: 12345678-9 or 12.345.678-9)
+</ParamField>
+
+### Example Request
+
+```json
+{
+  "rut": "12.345.678-9"
+}
+```
+
+### Response
+
+<ResponseField name="valid" type="boolean">
+  Whether the RUT is valid
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Validation result message in Spanish
+</ResponseField>
+
+### Example Response
+
+```json 200 - Valid RUT
+{
+  "valid": true,
+  "message": "RUT válido"
+}
+```
+
+```json 200 - Invalid RUT
+{
+  "valid": false,
+  "message": "RUT inválido"
+}
+```
+
+## Verify Lawyer (PJUD)
+
+**Endpoint:** `POST /verify-lawyer`
+
+**Authentication:** Not required (public endpoint)
+
+**Timeout:** 15 seconds
+
+Verifies a lawyer's credentials against the Chilean Poder Judicial database and checks for duplicate registrations.
+
+### Request Body
+
+<ParamField path="rut" type="string" required>
+  Lawyer's RUT (format: 12345678-9)
+</ParamField>
+
+<ParamField path="fullName" type="string">
+  Lawyer's full name (optional, for additional verification)
+</ParamField>
+
+### Example Request
+
+```json
+{
+  "rut": "12345678-9",
+  "fullName": "María González Pérez"
+}
+```
+
+### Response - Verified
+
+<ResponseField name="verified" type="boolean">
+  Verification status
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Result message in Spanish
+</ResponseField>
+
+<ResponseField name="details" type="object">
+  Lawyer information from PJUD
+  
+  <ResponseField name="rut" type="string">
+    Normalized RUT
+  </ResponseField>
+  
+  <ResponseField name="nombre" type="string">
+    Lawyer's full name from PJUD
+  </ResponseField>
+  
+  <ResponseField name="nombreCompleto" type="string">
+    Complete name
+  </ResponseField>
+  
+  <ResponseField name="region" type="string">
+    Region where the lawyer practices
+  </ResponseField>
+  
+  <ResponseField name="source" type="string">
+    Verification source ("Poder Judicial de Chile")
+  </ResponseField>
+  
+  <ResponseField name="verifiedAt" type="string">
+    ISO 8601 verification timestamp
+  </ResponseField>
+</ResponseField>
+
+### Example Responses
+
+```json 200 - Verified Lawyer
+{
+  "verified": true,
+  "message": "Abogado verificado exitosamente",
+  "details": {
+    "rut": "123456789",
+    "nombre": "María González Pérez",
+    "nombreCompleto": "María González Pérez",
+    "region": "Metropolitana",
+    "source": "Poder Judicial de Chile",
+    "verifiedAt": "2026-03-04T10:30:00.000Z"
+  }
+}
+```
+
+```json 200 - Not Found
+{
+  "verified": false,
+  "message": "No se encontró el abogado en los registros del Poder Judicial",
+  "details": {
+    "rut": "123456789",
+    "nombre": "No proporcionado",
+    "reason": "No se encontró en los registros del Poder Judicial"
+  }
+}
+```
+
+```json 200 - Suspended Lawyer
+{
+  "verified": false,
+  "message": "El abogado se encuentra suspendido (Sanción Ejecutoriada Permanente). No es posible registrarse.",
+  "details": {
+    "rut": "123456789",
+    "nombre": "Juan Pérez",
+    "reason": "Abogado suspendido indefinidamente",
+    "suspensionType": "Permanente",
+    "suspensionDate": "30-12-9999"
+  }
+}
+```
+
+```json 200 - Duplicate RUT
+{
+  "verified": false,
+  "message": "El RUT 12.345.678-9 ya está registrado por María González en nuestra plataforma.",
+  "details": {
+    "rut": "123456789",
+    "formattedRut": "12.345.678-9",
+    "registeredBy": "María González",
+    "reason": "RUT duplicado"
+  }
+}
+```
+
+```json 400 - Invalid Format
+{
+  "verified": false,
+  "message": "Formato de RUT inválido. Use el formato 12345678-9"
+}
+```
+
+```json 408 - Timeout
+{
+  "verified": false,
+  "message": "La verificación tardó demasiado. Por favor, inténtalo de nuevo.",
+  "error": "timeout"
+}
+```
+
+## Profile Fields
+
+### Client Profile Fields
+
+- `user_id`: User ID (UUID)
+- `email`: Email address
+- `first_name`: First name
+- `last_name`: Last name
+- `display_name`: Display name
+- `avatar_url`: Profile picture URL
+- `phone`: Phone number
+- `has_used_free_consultation`: Free consultation usage flag
+- `created_at`: Account creation timestamp
+- `updated_at`: Last update timestamp
+
+### Lawyer Profile Fields
+
+All client fields plus:
+
+- `rut`: Chilean RUT (required for lawyers)
+- `pjud_verified`: PJUD verification status
+- `specialties`: Array of legal specialties
+- `bio`: Professional bio
+- `experience_years`: Years of experience
+- `hourly_rate_clp`: Hourly rate in CLP
+- `contact_fee_clp`: Contact/consultation fee
+- `bar_number`: Bar association number
+- `university`: Law school
+- `study_start_year`: Year started law school
+- `study_end_year`: Year completed law school
+- `education`: Education details (JSON)
+- `certifications`: Certifications (JSON)
+- `languages`: Spoken languages array
+- `location`: Practice location
+- `rating`: Average rating (0-5)
+- `review_count`: Number of reviews
+- `verified`: Platform verification status
+- `available_for_hire`: Availability flag
+
+## RLS Policies
+
+### Profiles Table
+
+- **SELECT**: Public read access for basic profile info
+- **INSERT**: Service role only (handled during signup)
+- **UPDATE**: Users can update their own profile
+- **DELETE**: Admin only (via service role)

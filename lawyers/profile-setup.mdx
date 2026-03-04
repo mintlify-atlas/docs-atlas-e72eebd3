@@ -1,0 +1,346 @@
+---
+title: 'Profile Setup'
+description: 'Configure your lawyer profile with specialties, bio, rates, and professional information'
+icon: 'id-card'
+---
+
+## Profile Overview
+
+Your lawyer profile is accessed through `/lawyer/profile` and managed via the `ProfilePage.tsx` component. It consists of several key sections that clients see when browsing lawyers.
+
+## Personal Information
+
+### Basic Details
+
+```typescript
+interface ProfileFormData {
+  first_name: string
+  last_name: string
+  bio: string
+  phone: string
+  location: string
+  website: string
+  avatar_url?: string
+}
+```
+
+<Steps>
+  <Step title="Profile Photo">
+    Upload a professional photo using the `ProfileAvatarUpload` component:
+    
+    - Maximum size: 5MB
+    - Formats: JPG, PNG, WebP
+    - Stored in Supabase Storage bucket: `avatars`
+    - Auto-resized to square aspect ratio
+    
+    ```typescript
+    <ProfileAvatarUpload 
+      avatarUrl={formData.avatar_url}
+      onUpload={async (url) => {
+        await updateProfile({ avatar_url: url })
+      }}
+      disabled={!isEditing}
+    />
+    ```
+  </Step>
+
+  <Step title="Professional Bio">
+    Write a compelling bio (recommended 150-500 characters):
+    
+    <Tip>
+      "Cuéntanos sobre tu experiencia, especialidades y forma de trabajo. Esta información ayuda a los usuarios a conocerte mejor y tomar una decisión informada al agendar."
+    </Tip>
+    
+    The bio is displayed prominently on your public profile at `/abogado/{slug}-{id}`.
+  </Step>
+
+  <Step title="Contact Information">
+    - **Phone**: Chilean format `+56 9 1234 5678`
+    - **Location**: City, Region (e.g., "Santiago, Región Metropolitana")
+    - **Website**: Your professional website (optional)
+  </Step>
+</Steps>
+
+## Professional Information
+
+### Specializations
+
+Select one or more areas of legal practice from 18 available specializations:
+
+```typescript
+const availableSpecializations = [
+  'Derecho Laboral',
+  'Derecho Civil',
+  'Derecho de Familia',
+  'Derecho Penal',
+  'Derecho Comercial',
+  'Derecho Tributario',
+  'Derecho Inmobiliario',
+  'Derecho de Propiedad Intelectual',
+  'Derecho Ambiental',
+  'Derecho Bancario',
+  'Derecho de Consumidor',
+  'Derecho Migratorio',
+  'Derecho Internacional',
+  'Derecho Constitucional',
+  'Derecho Administrativo',
+  'Derecho de Salud',
+  'Derecho de Tecnología',
+  'Derecho Deportivo'
+]
+```
+
+Specializations are stored as an array in `profiles.specialties` and used for:
+- Client search filtering
+- Lawyer recommendations
+- Service categorization
+
+### Education & Credentials
+
+<CodeGroup>
+```typescript Education Fields
+{
+  education: string              // e.g., "Abogado", "Licenciado en Derecho"
+  university: string             // Selected from Chilean universities list
+  study_start_year: number       // e.g., 2010
+  study_end_year: number         // e.g., 2015
+  certifications?: string        // Additional certifications
+  bar_association_number: string // Colegio de Abogados number
+}
+```
+
+```typescript University Options
+// Partial list - see ProfilePage.tsx line 1276+
+const universities = [
+  'Universidad de Chile',
+  'Pontificia Universidad Católica de Chile',
+  'Universidad de Concepción',
+  'Universidad Adolfo Ibáñez',
+  'Universidad Diego Portales',
+  // ... 40+ universities
+]
+```
+</CodeGroup>
+
+### Professional Document Upload
+
+Upload your professional title or certificate:
+
+```typescript
+<DocumentUpload
+  bucket="documents"
+  userId={user?.id}
+  onUpload={async (url, fileName) => {
+    await supabase.auth.updateUser({
+      data: {
+        professional_document: url,
+        document_file_name: fileName
+      }
+    })
+  }}
+  description="Sube tu título profesional o certificado"
+/>
+```
+
+- Accepted formats: PDF, JPG, PNG
+- Max size: 10MB
+- Stored in `documents` bucket
+- Reviewed by admin for verification
+
+## Rates & Pricing
+
+### Hourly Rate
+
+Set your consultation rate in Chilean Pesos (CLP):
+
+```typescript
+hourly_rate_clp: number  // e.g., 50000 ($50,000 CLP)
+```
+
+<Note>
+  The hourly rate is displayed on your profile and used for appointment booking calculations.
+</Note>
+
+### Contact Fee
+
+Configure a fee for direct client contact (second contact onwards):
+
+```typescript
+contact_fee_clp: number  // e.g., 10000 ($10,000 CLP)
+```
+
+<Info>
+  "Esta tarifa se cobrará a los clientes al realizar el segundo 'Contactar' contigo."
+  
+  The first contact is free; subsequent contacts are charged to prevent spam.
+</Info>
+
+## RUT & PJUD Verification
+
+### RUT Format & Validation
+
+The Chilean RUT is formatted and validated using this algorithm:
+
+```typescript
+const formatRUT = (rut: string): string => {
+  // Remove non-digit and non-k/K characters
+  let cleanRut = rut.replace(/[^\dkK]/g, '')
+  
+  // Extract verification digit
+  const dv = cleanRut.slice(-1).toUpperCase()
+  let number = cleanRut.slice(0, -1)
+  
+  // Add dots as thousand separators
+  let formatted = ''
+  let counter = 0
+  
+  for (let i = number.length - 1; i >= 0; i--) {
+    formatted = number[i] + formatted
+    counter++
+    if (counter === 3 && i > 0) {
+      formatted = '.' + formatted
+      counter = 0
+    }
+  }
+  
+  return `${formatted}-${dv}`  // e.g., "12.345.678-9"
+}
+```
+
+### PJUD Verification Process
+
+<Steps>
+  <Step title="Enter RUT">
+    Input your RUT in the profile form. Format is automatically applied as you type.
+  </Step>
+
+  <Step title="Click Verify">
+    Click the "Verificar" button to initiate verification:
+    
+    ```typescript
+    const handleVerifyRUT = async () => {
+      const result = await verifyWithPJUD(
+        formData.rut,
+        `${formData.first_name} ${formData.last_name}`
+      )
+      
+      if (result?.verified) {
+        setFormData(prev => ({
+          ...prev,
+          pjud_verified: true
+        }))
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="API Validation">
+    System calls the PJUD scraper:
+    
+    ```typescript
+    // lib/pjudScraper.ts
+    const searchUrl = 'https://www.pjud.cl/ajax/Lawyers/search'
+    
+    const formData = new URLSearchParams()
+    formData.append('dni', rutBody)      // e.g., "12345678"
+    formData.append('digit', rutVerifier) // e.g., "9"
+    
+    const response = await fetch(searchUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: formData.toString()
+    })
+    ```
+  </Step>
+
+  <Step title="Result Display">
+    Verification status is shown inline:
+    
+    - ✅ **Success**: Green checkmark with "Verificado con el Poder Judicial de Chile"
+    - ❌ **Error**: Red X with error message
+    - ⏳ **Verifying**: Loading spinner
+  </Step>
+</Steps>
+
+<Warning>
+  If the RUT is modified after verification, the `pjud_verified` flag is reset to `false` and re-verification is required.
+</Warning>
+
+### Verification States
+
+```typescript
+type VerificationStatus = 'idle' | 'verifying' | 'success' | 'error'
+
+// Stored in database
+interface Profile {
+  rut: string
+  pjud_verified: boolean
+}
+```
+
+## Profile Completion Tracking
+
+The system calculates completion percentage based on filled fields:
+
+```typescript
+// Displayed in ProfileCompletion component
+const completionPercentage = calculateProfileCompletion(profile)
+
+// Breakdown:
+// - Basic info (20%): name, email, phone, location
+// - Bio (10%): professional description
+// - Photo (10%): avatar uploaded
+// - Experience (15%): years + specializations
+// - Education (15%): degree + university + years
+// - Verification (15%): PJUD verified
+// - Rates (10%): hourly_rate_clp set
+// - Document (5%): professional document uploaded
+```
+
+<Tip>
+  Aim for 100% completion to maximize visibility in client searches.
+</Tip>
+
+## Saving Profile Changes
+
+Profile updates are saved to both `profiles` table and `auth.users.user_metadata`:
+
+```typescript
+const handleSave = async () => {
+  const updateData = {
+    first_name: formData.first_name?.trim(),
+    last_name: formData.last_name?.trim(),
+    bio: formData.bio?.trim(),
+    specialties: selectedSpecializations,
+    experience_years: Number(formData.experience_years),
+    hourly_rate_clp: Number(formData.hourly_rate_clp),
+    // ... all other fields
+  }
+  
+  await updateProfile(updateData)
+  
+  // Auto-save when profile reaches 100%
+  if (completionPercentage === 100 && hasChanges) {
+    await handleSave()
+  }
+}
+```
+
+## Public Profile View
+
+Clients see your profile at `/abogado/{slug}-{id}` with:
+
+- Profile photo and name
+- Specializations (as badges)
+- Bio and experience
+- Hourly rate
+- Education details
+- Verification badge (if PJUD verified)
+- Available services
+- Booking button
+
+<Card title="Preview Your Profile" icon="eye">
+  Click "Ver perfil" in the profile page header to view your public-facing profile as clients see it.
+</Card>

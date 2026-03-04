@@ -1,0 +1,292 @@
+---
+title: 'Managing Availability'
+description: 'Set up and manage your weekly availability schedule for client bookings'
+icon: 'calendar-days'
+---
+
+## Overview
+
+The availability system allows lawyers to define their working hours on a weekly recurring schedule. This is used for appointment booking and is managed through the `ManageAvailability` component.
+
+## Accessing Availability Settings
+
+Availability is configured from your profile page:
+
+```typescript
+// Triggered from ProfilePage.tsx
+<ManageAvailability 
+  lawyerId={user?.id}
+  isEditing={isEditing}
+  onAvailabilityChange={handleAvailabilityChange}
+/>
+```
+
+<Note>
+  The availability editor is only accessible when your profile is in edit mode.
+</Note>
+
+## Availability Grid
+
+The system uses a time-slot grid covering:
+
+- **Days**: Monday through Sunday
+- **Hours**: 09:00 - 20:00 (10 hours)
+- **Granularity**: 1-hour blocks
+
+```typescript
+const HOURS = Array.from({ length: 10 }, (_, i) => 9 + i) // 09:00–20:00
+const DAYS = [
+  "Lunes", "Martes", "Miércoles", "Jueves", 
+  "Viernes", "Sábado", "Domingo"
+]
+```
+
+## Setting Your Availability
+
+<Steps>
+  <Step title="Open Availability Manager">
+    Click **Gestionar disponibilidad** button on your profile page. This opens a modal with the weekly grid.
+  </Step>
+
+  <Step title="Select Time Slots">
+    Click individual hour blocks to toggle availability:
+    
+    - **Blue background**: Available
+    - **Gray background**: Unavailable
+    - **Check mark**: Confirms selection
+    
+    ```typescript
+    const toggleCell = (day, hourIndex) => {
+      if (day === "Domingo") return // Sunday not editable
+      
+      setAvailability((prev) => {
+        const dayAvailability = prev[day] || HOURS.map(() => false)
+        return {
+          ...prev,
+          [day]: dayAvailability.map((v, i) => 
+            i === hourIndex ? !v : v
+          )
+        }
+      })
+    }
+    ```
+  </Step>
+
+  <Step title="Use Quick Fill (Optional)">
+    Check "Llenar todas las horas de Lunes a Viernes" to automatically fill weekday hours:
+    
+    ```typescript
+    const fillWeekdays = () => {
+      const newAvailability = {}
+      for (let i = 0; i < 5; i++) { // Mon-Fri
+        newAvailability[DAYS[i]] = HOURS.map(() => true)
+      }
+      setAvailability(newAvailability)
+    }
+    ```
+  </Step>
+
+  <Step title="Save Changes">
+    Click **Guardar cambios** to persist your availability:
+    
+    ```typescript
+    const save = async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .update({
+          availability: availability,
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', lawyerId)
+    }
+    ```
+  </Step>
+</Steps>
+
+## Day & Time Restrictions
+
+### Sunday Restriction
+
+<Warning>
+  **Domingo** (Sunday) is disabled and cannot be made available. This aligns with standard Chilean legal practice schedules.
+</Warning>
+
+```typescript
+if (day === "Domingo") return // No availability on Sundays
+```
+
+### Saturday Limitations
+
+Saturday hours are limited to morning/early afternoon:
+
+```typescript
+const isSaturdayAfternoon = day === "Sábado" && hour >= 15
+
+// Disabled: Saturday 15:00-20:00
+<button
+  disabled={isSunday || isSaturdayAfternoon}
+  className={isSaturdayAfternoon ? "bg-gray-200 cursor-not-allowed" : ""}
+/>
+```
+
+Saturday availability:
+- ✅ 09:00 - 14:00
+- ❌ 15:00 - 20:00
+
+## Data Structure
+
+Availability is stored as JSON in the `profiles.availability` column:
+
+```typescript
+interface WeeklyAvailability {
+  [day: string]: boolean[]  // Array of 10 booleans for hours 9-19
+}
+
+// Example
+{
+  "Lunes": [true, true, true, false, false, true, true, true, false, false],
+  "Martes": [true, true, true, true, true, true, true, false, false, false],
+  "Miércoles": [true, true, false, false, true, true, true, true, false, false],
+  "Jueves": [true, true, true, true, true, true, false, false, false, false],
+  "Viernes": [true, true, true, false, false, false, false, false, false, false],
+  "Sábado": [true, true, false, false, false, false, false, false, false, false],
+  "Domingo": [false, false, false, false, false, false, false, false, false, false]
+}
+```
+
+Each boolean represents a 1-hour slot:
+- Index 0 = 09:00-10:00
+- Index 1 = 10:00-11:00
+- ...
+- Index 9 = 18:00-19:00
+
+## Loading Existing Availability
+
+When opening the availability manager, existing settings are loaded:
+
+```typescript
+const loadAvailability = async () => {
+  const { data } = await supabase
+    .from('profiles')
+    .select('availability')
+    .eq('user_id', lawyerId)
+    .single()
+  
+  if (data?.availability) {
+    let savedAvailability = typeof data.availability === 'string' 
+      ? JSON.parse(data.availability)
+      : data.availability
+    
+    setAvailability(savedAvailability)
+  } else {
+    // Initialize empty
+    const empty = {}
+    DAYS.forEach(day => {
+      empty[day] = HOURS.map(() => false)
+    })
+    setAvailability(empty)
+  }
+}
+```
+
+## Change Tracking
+
+The system tracks unsaved changes:
+
+```typescript
+const [hasChanges, setHasChanges] = useState(false)
+const [originalAvailability, setOriginalAvailability] = useState({})
+
+useEffect(() => {
+  const changed = JSON.stringify(availability) !== 
+                 JSON.stringify(originalAvailability)
+  setHasChanges(changed)
+}, [availability, originalAvailability])
+
+// Save button disabled when no changes
+<Button 
+  onClick={save} 
+  disabled={saving || !hasChanges}
+>
+  Guardar cambios
+</Button>
+```
+
+## Google Calendar Integration
+
+<Info>
+  Future integration: The dashboard includes a `GoogleCalendarConnect` component for syncing availability with Google Calendar events.
+</Info>
+
+```typescript
+// From DashboardPage.tsx
+<GoogleCalendarConnect />
+```
+
+Planned features:
+- Auto-block appointment slots when Google Calendar events exist
+- Two-way sync for bookings
+- OAuth2 integration for calendar access
+
+## Appointment Booking Logic
+
+When clients book appointments, the system:
+
+1. **Checks lawyer availability** for the requested time slot
+2. **Validates** the time is marked as available in the grid
+3. **Confirms** no existing appointment conflicts
+4. **Creates** the appointment and blocks the time
+
+```typescript
+// Client-side booking validation (simplified)
+const isSlotAvailable = (lawyerId, date, hour) => {
+  const dayName = format(date, 'EEEE', { locale: es }) // e.g., "Lunes"
+  const hourIndex = hour - 9 // Convert 9-19 to index 0-9
+  
+  return availability[dayName]?.[hourIndex] === true
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Consistent Schedule" icon="clock">
+    Maintain regular weekly hours for client predictability
+  </Card>
+  <Card title="Buffer Time" icon="shield">
+    Leave gaps between appointments for preparation
+  </Card>
+  <Card title="Update Regularly" icon="refresh">
+    Review and adjust availability weekly
+  </Card>
+  <Card title="Block Vacations" icon="umbrella-beach">
+    Use appointment system to block vacation periods
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Changes not saving">
+    Ensure you're clicking "Guardar cambios" before closing the modal. The system tracks `hasChanges` state and won't persist without explicit save.
+  </Accordion>
+  
+  <Accordion title="Can't select Sunday slots">
+    Sunday is intentionally disabled per platform policy. Focus availability on weekdays and Saturday mornings.
+  </Accordion>
+  
+  <Accordion title="Availability not showing to clients">
+    Verify your profile completion is above 70% and you have at least one active service created.
+  </Accordion>
+</AccordionGroup>
+
+## Impact on Profile Visibility
+
+Setting availability impacts your profile's bookability status:
+
+| Availability Status | Client Experience |
+|---------------------|-------------------|
+| **No slots set** | "Currently unavailable" message |
+| **< 10 hours/week** | Limited booking options |
+| **10+ hours/week** | Full booking calendar shown |
+| **Weekdays filled** | "Recommended" badge on profile |

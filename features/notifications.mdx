@@ -1,0 +1,390 @@
+---
+title: 'Notification System'
+description: 'Multi-channel notification system for appointments, messages, and platform updates'
+icon: 'bell'
+---
+
+## Overview
+
+upLegal's notification system keeps users informed about important events through both in-app and email notifications. The system is fully customizable, allowing users to control which notifications they receive and through which channels.
+
+## Notification Types
+
+The platform supports four primary notification categories:
+
+### Appointment Notifications
+
+```typescript
+type: 'appointment'
+```
+
+Notifications related to legal consultations:
+
+- New appointment scheduled
+- Upcoming appointment reminder (24 hours before)
+- Appointment reminder (1 hour before)
+- Appointment cancellation
+- Appointment rescheduling
+- Appointment completion
+
+**Example:**
+```typescript
+{
+  id: '1',
+  title: 'Nueva cita programada',
+  message: 'Tienes una nueva cita programada para el 15 de septiembre a las 15:00',
+  type: 'appointment',
+  read: false,
+  createdAt: new Date(),
+  link: '/dashboard/appointments'
+}
+```
+
+### Message Notifications
+
+```typescript
+type: 'message'
+```
+
+Notifications for messaging activity:
+
+- New message received
+- New conversation started
+- Unread message reminder
+- Contact fee payment required
+
+**Example:**
+```typescript
+{
+  id: '2',
+  title: 'Nuevo mensaje',
+  message: 'Has recibido un nuevo mensaje de tu abogado',
+  type: 'message',
+  read: false,
+  createdAt: new Date(),
+  link: '/dashboard/messages'
+}
+```
+
+### Payment Notifications
+
+```typescript
+type: 'payment'
+```
+
+Notifications about financial transactions:
+
+- Payment successful
+- Payment failed
+- Refund processed
+- Contact fee required
+- Invoice generated
+
+### System Notifications
+
+```typescript
+type: 'system'
+```
+
+Platform updates and announcements:
+
+- Account verification status
+- Profile updates
+- Policy changes
+- New features
+- Maintenance notices
+
+## Notification Settings
+
+Users can customize notification preferences for each category:
+
+```typescript
+interface NotificationSettings {
+  appointmentReminders: NotificationPreference;
+  newMessages: NotificationPreference;
+  paymentUpdates: NotificationPreference;
+  legalUpdates: NotificationPreference;
+  marketing: NotificationPreference;
+}
+
+interface NotificationPreference {
+  email: boolean;
+  inApp: boolean;
+}
+```
+
+### Default Settings
+
+<CardGroup cols={2}>
+  <Card title="Appointment Reminders" icon="calendar">
+    Email: ✓ Enabled
+    In-App: ✓ Enabled
+  </Card>
+  
+  <Card title="New Messages" icon="message">
+    Email: ✓ Enabled
+    In-App: ✓ Enabled
+  </Card>
+  
+  <Card title="Payment Updates" icon="credit-card">
+    Email: ✓ Enabled
+    In-App: ✓ Enabled
+  </Card>
+  
+  <Card title="Legal Updates" icon="scale-balanced">
+    Email: ✓ Enabled
+    In-App: ✗ Disabled
+  </Card>
+  
+  <Card title="Marketing" icon="megaphone">
+    Email: ✗ Disabled
+    In-App: ✗ Disabled
+  </Card>
+</CardGroup>
+
+<Note>
+Users can modify these preferences at any time from their account settings.
+</Note>
+
+## Delivery Channels
+
+### In-App Notifications
+
+Displayed within the upLegal platform:
+
+- **Bell Icon**: Shows unread count badge
+- **Dropdown Panel**: Lists recent notifications
+- **Notification Center**: Full notification history
+- **Real-time Updates**: Instantly appear without page refresh
+
+#### Unread Count
+
+```typescript
+const unreadCount = notifications.filter(n => !n.read).length;
+```
+
+Displayed as a badge on the notification bell icon in the header.
+
+### Email Notifications
+
+Sent to the user's registered email address:
+
+- **Immediate**: Time-sensitive notifications sent instantly
+- **Digest**: Optional daily summary of activity
+- **Branded**: Professional emails with upLegal branding
+- **Actionable**: Include relevant links to take action
+
+## Notification Management
+
+### Marking as Read
+
+Notifications can be marked as read:
+
+```typescript
+// Mark single notification
+markAsRead(notificationId: string): void
+
+// Mark all notifications
+markAllAsRead(): void
+```
+
+**User Actions:**
+- Click on a notification to mark as read and navigate to link
+- Use "Mark all as read" button in notification center
+- Automatically marked as read when visiting the linked page
+
+### Notification Persistence
+
+Notifications are stored in the database:
+
+- **Retention**: Kept for 90 days
+- **Archive**: Automatically archived after 90 days
+- **Deletion**: Users cannot delete individual notifications
+- **Export**: Available in data export requests
+
+## Notification Structure
+
+```typescript
+interface Notification {
+  id: string;
+  title: string;              // Brief headline
+  message: string;            // Detailed description
+  type: 'appointment' | 'message' | 'payment' | 'system';
+  read: boolean;              // Read status
+  createdAt: Date;            // Timestamp
+  link?: string;              // Optional action link
+}
+```
+
+### Action Links
+
+Notifications include contextual links:
+
+| Type | Link Destination |
+|------|------------------|
+| Appointment | `/dashboard/appointments` or specific appointment |
+| Message | `/dashboard/messages` or specific conversation |
+| Payment | `/dashboard/payments` or specific invoice |
+| System | Relevant settings or announcement page |
+
+## User Interface
+
+### Notification Bell
+
+Header component showing:
+
+- Bell icon
+- Red badge with unread count (if > 0)
+- Click to open notification dropdown
+
+### Notification Dropdown
+
+Pop-up panel displaying:
+
+- Most recent 5 notifications
+- "Ver todas" link to notification center
+- "Marcar todas como leídas" action
+- Empty state when no notifications
+
+### Notification Center
+
+Full-page view with:
+
+- All notifications (paginated)
+- Filter by type
+- Search functionality
+- Bulk actions
+- Date grouping
+
+## Programmatic Notifications
+
+The system provides a hook for adding notifications:
+
+```typescript
+const { addNotification } = useNotifications();
+
+// Add new notification
+addNotification({
+  title: 'Pago exitoso',
+  message: 'Tu pago de $50.000 ha sido procesado',
+  type: 'payment',
+  link: '/dashboard/payments'
+});
+```
+
+Automatic fields:
+- `id`: Generated automatically
+- `read`: Defaults to `false`
+- `createdAt`: Set to current timestamp
+
+## Settings Management
+
+Users can update notification preferences:
+
+```typescript
+const { updateSettings } = useNotifications();
+
+await updateSettings({
+  appointmentReminders: { email: true, inApp: true },
+  newMessages: { email: true, inApp: false },
+  marketing: { email: false, inApp: false }
+});
+```
+
+<Note>
+Changes to notification settings are applied immediately and synchronized across all user devices.
+</Note>
+
+## Appointment Reminders
+
+Automatic reminders for upcoming consultations:
+
+### 24-Hour Reminder
+
+Sent one day before the appointment:
+
+- **Email**: Full consultation details
+- **In-App**: Banner notification
+- **Content**: Date, time, lawyer name, Google Meet link
+
+### 1-Hour Reminder
+
+Sent 60 minutes before the appointment:
+
+- **Email**: Brief reminder with meeting link
+- **In-App**: High-priority notification
+- **Content**: Time remaining, direct join link
+
+### Reminder Customization
+
+Future feature: Users will be able to customize:
+
+- Reminder timing (1 hour, 2 hours, 1 day, etc.)
+- Reminder frequency
+- Reminder channels
+
+## Real-Time Updates
+
+Notifications appear instantly using:
+
+- **WebSocket Connection**: Real-time push notifications
+- **Service Workers**: Background updates when app is closed
+- **Polling Fallback**: Regular checks if real-time unavailable
+
+## Error Handling
+
+### Failed Email Delivery
+
+If email notification fails:
+
+1. Retry automatically (up to 3 attempts)
+2. Log failure for investigation
+3. Ensure in-app notification still delivered
+4. User notified of email delivery issues in settings
+
+### Network Issues
+
+During connectivity problems:
+
+- Queue notifications locally
+- Sync when connection restored
+- Prevent duplicate notifications
+- Show offline indicator to user
+
+## Privacy & Consent
+
+### Email Notifications
+
+- Users consent to email notifications during registration
+- Can opt-out at any time via settings
+- Unsubscribe link included in all emails
+- Transactional emails (appointments, payments) cannot be disabled
+
+### Data Storage
+
+- Notifications stored securely in database
+- Protected by Row Level Security
+- Accessible only to notification recipient
+- Included in GDPR data export requests
+
+## FAQ
+
+<Accordion title="How do I stop receiving email notifications?">
+Go to Settings > Notifications and toggle off the "Email" option for the notification types you don't want to receive. Note that critical notifications like appointment confirmations and payment receipts cannot be disabled.
+</Accordion>
+
+<Accordion title="Can I get notifications on my phone?">
+Yes! When you install the upLegal mobile app (coming soon), you'll receive push notifications on your phone. For now, you can receive email notifications and check in-app notifications when you log in.
+</Accordion>
+
+<Accordion title="Why didn't I receive an appointment reminder?">
+Check your notification settings to ensure appointment reminders are enabled for both email and in-app. Also check your spam folder. If the issue persists, contact support.
+</Accordion>
+
+<Accordion title="Can I delete old notifications?">
+Notifications are automatically archived after 90 days. While you can't delete individual notifications, marking them as read will remove them from your unread list and minimize their visibility.
+</Accordion>
+
+<Accordion title="How do I customize when I receive reminders?">
+Currently, appointment reminders are sent at 24 hours and 1 hour before your consultation. Customizable reminder timing is planned for a future update.
+</Accordion>

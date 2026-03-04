@@ -1,0 +1,233 @@
+---
+title: 'Search and Filtering System'
+description: 'Comprehensive search and filtering capabilities for finding the right lawyer'
+icon: 'filter'
+---
+
+## Overview
+
+upLegal's search and filtering system provides clients with powerful tools to find the perfect lawyer for their legal needs. The system combines location-based search, specialty filtering, and advanced filters for rating, price, experience, and availability.
+
+## Search Capabilities
+
+### Text Search
+
+Clients can search for lawyers using natural language queries. The search system includes intelligent keyword detection:
+
+- **Family Law Keywords**: familia, divorcio, pension, alimentos, visitas, tuicion, cuidado personal, separacion
+- **Labor Law Keywords**: despido, laboral, trabajo, finiquito, tutela
+
+When these keywords are detected, the system automatically suggests or applies the relevant specialty filter.
+
+### Location Search
+
+The platform supports searching across all Chilean regions and cities:
+
+<Accordion title="Supported Chilean Locations">
+
+**Región de Arica y Parinacota**: Arica, Putre, General Lagos, Camarones
+
+**Región de Tarapacá**: Iquique, Alto Hospicio, Pozo Almonte, Pica, Huara, Colchane
+
+**Región de Antofagasta**: Antofagasta, Calama, Tocopilla, Mejillones, Taltal, San Pedro de Atacama, María Elena
+
+**Región de Atacama**: Copiapó, Caldera, Tierra Amarilla, Chañaral, Diego de Almagro, Vallenar, Alto del Carmen, Freirina, Huasco
+
+**Región de Coquimbo**: La Serena, Coquimbo, Ovalle, Illapel, Los Vilos, Salamanca, Vicuña, Paihuano, Andacollo, La Higuera
+
+**Región de Valparaíso**: Valparaíso, Viña del Mar, Quilpué, Villa Alemana, San Antonio, Quillota, San Felipe, Los Andes, La Ligua, Zapallar
+
+**Región Metropolitana**: Santiago, Maipú, Puente Alto, La Florida, Las Condes, Providencia, Ñuñoa, La Reina, Peñalolén, La Pintana
+
+**Región del Libertador Bernardo O'Higgins**: Rancagua, San Fernando, Santa Cruz, Pichilemu, San Vicente de Tagua Tagua, Rengo, Machalí
+
+**Región del Maule**: Talca, Curicó, Linares, Constitución, Cauquenes, Parral, San Javier
+
+**Región de Ñuble**: Chillán, Chillán Viejo, Bulnes, Quirihue, San Carlos, Coihueco
+
+**Región del Biobío**: Concepción, Talcahuano, Los Ángeles, Coronel, Chiguayante, San Pedro de la Paz, Lota, Lebu
+
+**Región de La Araucanía**: Temuco, Padre Las Casas, Villarrica, Pucón, Angol, Victoria, Lautaro
+
+**Región de Los Ríos**: Valdivia, La Unión, Panguipulli, Paillaco, Río Bueno, Los Lagos
+
+**Región de Los Lagos**: Puerto Montt, Osorno, Castro, Ancud, Puerto Varas, Frutillar, Calbuco, Puerto Octay
+
+**Región de Aysén**: Coyhaique, Puerto Aysén, Chile Chico, Cochrane, Villa O'Higgins
+
+**Región de Magallanes**: Punta Arenas, Puerto Natales, Porvenir, Puerto Williams
+
+</Accordion>
+
+## Legal Specialties
+
+The platform supports 19 legal specialties:
+
+<CardGroup cols={2}>
+  <Card title="Civil Law" icon="scale-balanced">
+    Derecho Civil
+  </Card>
+  <Card title="Criminal Law" icon="gavel">
+    Derecho Penal
+  </Card>
+  <Card title="Labor Law" icon="briefcase">
+    Derecho Laboral
+  </Card>
+  <Card title="Family Law" icon="people-group">
+    Derecho de Familia
+  </Card>
+  <Card title="Commercial Law" icon="building">
+    Derecho Comercial
+  </Card>
+  <Card title="Tax Law" icon="file-invoice-dollar">
+    Derecho Tributario
+  </Card>
+  <Card title="Real Estate Law" icon="house">
+    Derecho Inmobiliario
+  </Card>
+  <Card title="Health Law" icon="heart-pulse">
+    Derecho de Salud
+  </Card>
+</CardGroup>
+
+Additional specialties include: Derecho Ambiental, Derecho de Consumidor, Derecho Administrativo, Derecho Procesal, Derecho de Propiedad Intelectual, Derecho de Seguridad Social, Derecho Minero, Derecho Aduanero, Derecho Marítimo, Derecho Aeronáutico, and Derecho Deportivo.
+
+## Advanced Filters
+
+### Consultation Modality
+
+Clients can filter lawyers by consultation type:
+
+- **Online**: Virtual consultations via video call
+- **Presencial**: In-person consultations (requires region selection)
+
+<Note>
+When selecting "Presencial" mode, clients must choose a specific Chilean region to find lawyers offering in-person consultations in that area.
+</Note>
+
+### Price Range Filter
+
+Filter lawyers by hourly consultation rate in Chilean Pesos (CLP):
+
+- **Range**: $0 - $1,000,000 CLP per hour
+- **Step**: $10,000 CLP increments
+- **Display**: Prices shown with Chilean number formatting (e.g., $50.000)
+
+### Rating Filter
+
+Filter by minimum lawyer rating:
+
+- **Range**: 1-5 stars
+- **Visual**: Interactive star selector
+- **Display**: Shows "X+" for selected rating (e.g., "4+" means 4 stars or higher)
+
+### Experience Filter
+
+Filter by minimum years of professional experience:
+
+- **Options**: Any, 3+, 5+, 10+ years
+- **Quick Select**: Grid of buttons for fast filtering
+
+### Availability Filters
+
+Multiple availability options can be selected simultaneously:
+
+```typescript
+{
+  availableToday: boolean,
+  availableThisWeek: boolean,
+  quickResponse: boolean,      // Response within 2 hours
+  emergencyConsultations: boolean
+}
+```
+
+## Sorting Options
+
+Search results can be sorted by:
+
+1. **Mejor calificación** (Best Rating): Highest-rated lawyers first
+2. **Más reseñas** (Most Reviews): Lawyers with most client reviews
+3. **Precio: menor a mayor** (Price: Low to High): Ascending hourly rate
+4. **Precio: mayor a menor** (Price: High to Low): Descending hourly rate
+
+## Filter Management
+
+### Active Filters Display
+
+Active filters are displayed as removable badges:
+
+```tsx
+<Badge>
+  Derecho de Familia
+  <X onClick={removeFilter} />
+</Badge>
+```
+
+Clients can:
+- Remove individual filters by clicking the X icon
+- Clear all filters with the "Limpiar todo" button
+
+### Filter Persistence
+
+All filters are persisted in URL parameters:
+
+- Allows bookmarking of specific searches
+- Enables sharing of search results
+- Maintains filter state across page refreshes
+
+<Accordion title="URL Parameter Structure">
+
+```
+?q=search+term
+&specialty=Derecho+Civil
+&specialty=Derecho+Penal
+&location=Santiago
+&minRating=4
+&minExperience=5
+&sort=rating
+```
+
+</Accordion>
+
+## Filter Panel UI
+
+The filter panel is a sliding drawer on mobile and desktop:
+
+- **Position**: Slides in from the right
+- **Width**: Full width on mobile, max 28rem on desktop
+- **Scroll**: Independently scrollable content area
+- **Actions**: Sticky bottom bar with "Limpiar filtros" and "Aplicar filtros" buttons
+
+### Filter Application
+
+Filters are applied when:
+
+1. Client clicks "Aplicar filtros" button
+2. Panel automatically closes
+3. URL parameters are updated
+4. Search results are refreshed with new filters
+
+## Search Performance
+
+- **Debouncing**: 300ms delay to prevent excessive API calls
+- **Infinite Scroll**: Automatic loading of additional results
+- **Page Size**: 12 lawyers per page
+- **Loading States**: Skeleton screens during initial load and pagination
+
+## FAQ
+
+<Accordion title="Can I select multiple specialties?">
+Yes! You can select multiple legal specialties to find lawyers who practice in multiple areas. The search will return lawyers who match any of the selected specialties.
+</Accordion>
+
+<Accordion title="How does the price filter work?">
+The price filter shows the lawyer's hourly consultation rate in Chilean Pesos. Use the slider to set your minimum and maximum budget, and only lawyers within that range will be displayed.
+</Accordion>
+
+<Accordion title="What does 'Quick Response' mean?">
+Lawyers with "Quick Response" enabled typically respond to messages within 2 hours during business hours, ensuring faster communication for time-sensitive legal matters.
+</Accordion>
+
+<Accordion title="Can I search for lawyers in multiple cities?">
+Currently, you can search for one location at a time. To see lawyers from multiple cities, you'll need to perform separate searches or remove the location filter to see all available lawyers.
+</Accordion>

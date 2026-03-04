@@ -1,0 +1,465 @@
+---
+title: Payment Process
+description: How clients pay for consultations via MercadoPago integration, including payment states and error handling
+---
+
+upLegal uses MercadoPago to process all consultation payments securely. The platform handles payment creation, status tracking, and automatic refunds when needed.
+
+## Payment Integration
+
+upLegal integrates with **MercadoPago**, Chile's leading payment processor, supporting:
+- Credit and debit cards (Visa, Mastercard, American Express)
+- Chilean local payment methods
+- Secure 3D authentication
+- Real-time payment status updates
+
+## Payment Flow
+
+<Steps>
+  <Step title="Booking Creation">
+    When a client books a consultation, the backend:
+    
+    1. Creates an `appointments` record with status `pending_payment`
+    2. Generates a MercadoPago preference
+    3. Returns a `payment_link` to redirect the client
+    
+    ```typescript
+    // Backend creates payment preference
+    const preference = {
+      items: [{
+        title: `Consulta legal con ${lawyerName}`,
+        quantity: 1,
+        currency_id: 'CLP',
+        unit_price: totalPrice
+      }],
+      back_urls: {
+        success: `${FRONTEND_URL}/booking-success`,
+        failure: `${FRONTEND_URL}/booking-failure`,
+        pending: `${FRONTEND_URL}/booking-pending`
+      },
+      auto_return: 'approved',
+      external_reference: bookingId
+    }
+    ```
+  </Step>
+  
+  <Step title="MercadoPago Redirect">
+    Client is redirected to MercadoPago's secure checkout:
+    
+    ```typescript
+    // src/pages/BookingPage.tsx:413
+    window.location.href = data.payment_link;
+    ```
+    
+    On MercadoPago, clients can:
+    - Enter card details
+    - Select payment method
+    - Apply discount codes (if available)
+    - Review total amount
+  </Step>
+  
+  <Step title="Payment Processing">
+    MercadoPago processes the payment and determines the outcome:
+    - **Approved**: Payment successful
+    - **Pending**: Awaiting confirmation (e.g., bank transfer)
+    - **Rejected**: Payment failed
+  </Step>
+  
+  <Step title="Return to upLegal">
+    MercadoPago redirects back to upLegal with payment status:
+    - `?status=approved` → Success page
+    - `?status=pending` → Pending page
+    - `?status=rejected` or `?status=failure` → Failure page
+    
+    The backend webhook also receives payment notifications for status updates.
+  </Step>
+  
+  <Step title="Confirmation">
+    Based on payment status:
+    - **Success**: Appointment confirmed, emails sent to both parties
+    - **Pending**: Client notified to wait for confirmation
+    - **Failure**: Client can retry payment
+  </Step>
+</Steps>
+
+## Payment States
+
+The platform displays different UI based on payment status:
+
+### Success State
+
+<img src="/images/payment-success.png" alt="Payment success screen with green checkmark" />
+
+**PaymentSuccess Component**
+
+Displays when payment is approved:
+
+```typescript
+// src/components/payment/PaymentSuccess.tsx:19-77
+export function PaymentSuccess({ payment, onBack, onViewReceipt }: PaymentSuccessProps) {
+  return (
+    <Card className="max-w-md mx-auto">
+      <CardHeader className="text-center space-y-4">
+        <div className="mx-auto rounded-full bg-green-100 p-3">
+          <CheckCircle2 className="h-12 w-12 text-green-600" />
+        </div>
+        <CardTitle>¡Pago Completado!</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="space-y-2 text-center">
+          <p className="text-3xl font-bold">{formatCurrency(payment.amount, payment.currency)}</p>
+          <p className="text-muted-foreground">{payment.description}</p>
+          <p className="text-sm text-muted-foreground">
+            ID de transacción: {payment.id}
+          </p>
+        </div>
+        {/* Date, payment method, actions... */}
+      </CardContent>
+    </Card>
+  );
+}
+```
+
+**Information Shown**
+- Green checkmark icon
+- "¡Pago Completado!" title
+- Total amount paid
+- Transaction ID
+- Payment date and time
+- Payment method (Tarjeta de crédito/débito)
+- "Volver al inicio" button
+- "Ver recibo" button (if receipt_url available)
+
+<Info>
+  An email confirmation is automatically sent with payment details and appointment information.
+</Info>
+
+### Pending State
+
+<img src="/images/payment-pending.png" alt="Payment pending screen with clock icon" />
+
+**PaymentPending Component**
+
+```typescript
+// src/components/payment/PaymentPending.tsx:18-95
+export function PaymentPending({ payment, onBack, onCheckStatus }: PaymentPendingProps) {
+  return (
+    <Card className="max-w-md mx-auto">
+      <CardHeader className="text-center space-y-4">
+        <div className="mx-auto rounded-full bg-amber-100 p-3">
+          <Clock className="h-12 w-12 text-amber-600" />
+        </div>
+        <CardTitle>Pago en Proceso</CardTitle>
+      </CardHeader>
+      {/* Amount, status, check status button... */}
+      <div className="rounded-md bg-amber-50 p-4">
+        <div className="flex">
+          <Clock className="h-5 w-5 text-amber-400" />
+          <div className="ml-3">
+            <h3 className="text-sm font-medium text-amber-800">
+              Estamos procesando tu pago
+            </h3>
+            <p className="mt-2 text-sm text-amber-700">
+              Recibirás una notificación por correo electrónico cuando el pago sea confirmado.
+              Este proceso puede tardar unos minutos.
+            </p>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+```
+
+**Information Shown**
+- Amber clock icon
+- "Pago en Proceso" title
+- Amount being processed
+- Transaction ID
+- Date initiated
+- Status: "En proceso"
+- "Verificar estado" button
+- "Volver al inicio" button
+- Warning box explaining the delay
+
+<Note>
+  Pending payments typically occur with bank transfers or when additional verification is needed. Most card payments are instantly approved or rejected.
+</Note>
+
+### Failure State
+
+<img src="/images/payment-failure.png" alt="Payment failure screen with red X icon" />
+
+**PaymentFailure Component**
+
+```typescript
+// src/components/payment/PaymentFailure.tsx:26-37
+const getErrorMessage = () => {
+  if (payment?.status_detail === 'cc_rejected_bad_filled_security_code') {
+    return 'El código de seguridad de la tarjeta es incorrecto.';
+  } else if (payment?.status_detail === 'cc_rejected_insufficient_amount') {
+    return 'Fondos insuficientes en la tarjeta.';
+  } else if (payment?.status_detail === 'cc_rejected_bad_filled_date') {
+    return 'La fecha de vencimiento es incorrecta.';
+  } else if (payment?.status_detail === 'cc_rejected_other_reason') {
+    return 'La tarjeta fue rechazada. Por favor, intenta con otro medio de pago.';
+  }
+  return 'El pago no pudo ser procesado. Por favor, inténtalo nuevamente.';
+};
+```
+
+**Error Messages by Status Code**
+
+| MercadoPago Status | User-Friendly Message |
+|--------------------|----------------------|
+| `cc_rejected_bad_filled_security_code` | El código de seguridad de la tarjeta es incorrecto |
+| `cc_rejected_insufficient_amount` | Fondos insuficientes en la tarjeta |
+| `cc_rejected_bad_filled_date` | La fecha de vencimiento es incorrecta |
+| `cc_rejected_other_reason` | La tarjeta fue rechazada. Por favor, intenta con otro medio de pago |
+| Default | El pago no pudo ser procesado. Por favor, inténtalo nuevamente |
+
+**Information Shown**
+- Red X icon
+- "Pago Rechazado" title
+- Amount that failed
+- Specific error message
+- Transaction ID (if available)
+- "Reintentar pago" button
+- "Volver al inicio" button
+- Support contact suggestion
+
+<Warning>
+  Failed payments do **not** reserve the time slot. The appointment record is marked as `payment_failed` and the slot becomes available again.
+</Warning>
+
+## Payment Logging
+
+All payment events are logged for analytics and debugging:
+
+```typescript
+// src/pages/BookingPage.tsx:387-397
+await logPaymentEvent({
+  event_type: 'started',
+  user_id: user?.id,
+  appointment_id: data.booking_id,
+  amount: totalPrice,
+  metadata: {
+    lawyer_id: lawyer.user_id,
+    duration,
+    source: 'BookingPage'
+  }
+});
+```
+
+**Logged Events**
+- `started`: When payment link is generated
+- `completed`: When payment succeeds
+- `failed`: When payment is rejected
+- `pending`: When payment needs confirmation
+
+## Price Calculation
+
+Payments include two components:
+
+```typescript
+// src/pages/BookingPage.tsx:484-496
+const calculateLawyerFee = () => {
+  if (!lawyer) return 0;
+  switch (duration) {
+    case 30: return Math.round(lawyer.hourly_rate_clp / 2);
+    case 60: return lawyer.hourly_rate_clp;
+    case 90: return Math.round(lawyer.hourly_rate_clp * 1.5);
+    case 120: return lawyer.hourly_rate_clp * 2;
+    default: return lawyer.hourly_rate_clp;
+  }
+};
+
+const lawyerFee = calculateLawyerFee();
+const serviceFee = Math.round(lawyerFee * 0.10); // 10% service fee
+const totalPrice = lawyerFee + serviceFee;
+```
+
+**Example Calculation**
+
+Lawyer hourly rate: $60,000 CLP
+Consultation duration: 90 minutes
+
+| Component | Calculation | Amount |
+|-----------|-------------|--------|
+| Lawyer fee | $60,000 × 1.5 | $90,000 |
+| Service fee | $90,000 × 0.10 | $9,000 |
+| **Total** | | **$99,000** |
+
+## Webhook Handling
+
+The backend receives MercadoPago webhooks for status updates:
+
+**Webhook Events**
+- `payment.created`: New payment initiated
+- `payment.updated`: Payment status changed
+- `payment.approved`: Payment successful
+- `payment.rejected`: Payment failed
+
+**Actions on Webhook**
+1. Verify webhook signature
+2. Fetch payment details from MercadoPago
+3. Update appointment status in database
+4. Send email notifications
+5. Create calendar events
+6. Update lawyer's availability
+
+<Tabs>
+  <Tab title="Approved">
+    - Appointment status → `confirmed`
+    - Email sent to client with meeting link
+    - Email sent to lawyer with client details
+    - Calendar invite created for both parties
+    - Analytics event fired
+  </Tab>
+  
+  <Tab title="Pending">
+    - Appointment status → `pending_payment_confirmation`
+    - Email sent to client explaining delay
+    - Time slot temporarily reserved
+    - Auto-cancel after 48 hours if not confirmed
+  </Tab>
+  
+  <Tab title="Rejected">
+    - Appointment status → `payment_failed`
+    - Email sent to client with retry link
+    - Time slot released immediately
+    - Analytics event fired with failure reason
+  </Tab>
+</Tabs>
+
+## Refund Policy
+
+upLegal offers refunds in specific cases:
+
+### Automatic Refunds
+
+**Lawyer No-Show**
+- If lawyer doesn't join within 15 minutes of start time
+- Full refund processed automatically
+- Email notification sent to client
+
+**Lawyer Cancellation**
+- If lawyer cancels more than 24 hours before
+- Full refund processed
+- Client can rebook with another lawyer
+
+**Lawyer Cancellation (< 24 hours)**
+- Full refund
+- Priority booking offered
+- Lawyer may face penalties
+
+### Client-Requested Refunds
+
+**More than 24 hours before**
+- Full refund minus processing fee (2%)
+- Cancellation confirmed via email
+
+**Less than 24 hours before**
+- 50% refund
+- Lawyer compensated for reserved time
+
+**After consultation started**
+- No refund
+- Exception: Technical issues on platform's side
+
+<Info>
+  Refunds are processed back to the original payment method within 5-10 business days.
+</Info>
+
+## Security Measures
+
+<CardGroup cols={2}>
+  <Card title="PCI Compliance" icon="shield">
+    upLegal never stores card details. All payment data is handled by MercadoPago's PCI-compliant infrastructure.
+  </Card>
+  
+  <Card title="3D Secure" icon="lock">
+    Card payments require 3D Secure authentication for added security.
+  </Card>
+  
+  <Card title="SSL Encryption" icon="key">
+    All payment communication is encrypted with TLS 1.3.
+  </Card>
+  
+  <Card title="Fraud Detection" icon="eye">
+    MercadoPago's machine learning detects suspicious transactions.
+  </Card>
+</CardGroup>
+
+## Testing Payments
+
+MercadoPago provides test cards for development:
+
+**Approved Payment**
+- Card: 5031 7557 3453 0604
+- CVV: 123
+- Expiry: Any future date
+
+**Rejected Payment**
+- Card: 5031 4332 1540 6351
+- CVV: 123
+- Expiry: Any future date
+
+**Pending Payment**
+- Card: 5031 7557 3453 0604
+- CVV: 123
+- Amount ending in .01 (e.g., $10,000.01)
+
+<Warning>
+  Test mode is automatically enabled in development environments. Never use real cards in test mode.
+</Warning>
+
+## Currency
+
+All transactions on upLegal are in **Chilean Pesos (CLP)**:
+- No decimal places (CLP is not subdivided)
+- Formatted with dot separators: $50.000
+- Currency code: CLP
+- Symbol: $
+
+```typescript
+// Currency formatting utility
+export function formatCurrency(amount: number, currency: string = 'CLP'): string {
+  return new Intl.NumberFormat('es-CL', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(amount);
+}
+```
+
+## Payment Receipt
+
+Clients receive a payment receipt via:
+1. **Email**: PDF attachment with full details
+2. **In-app**: Link to view/download receipt
+3. **MercadoPago**: Available in client's MercadoPago account
+
+**Receipt Contents**
+- upLegal logo and details
+- Transaction ID
+- Payment date and time
+- Lawyer name and details
+- Consultation date and duration
+- Price breakdown (lawyer fee + service fee)
+- Total paid
+- Payment method
+- Legal footer
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="After Payment" icon="calendar-check" href="#">
+    Receive confirmation email with meeting link and calendar invite
+  </Card>
+  
+  <Card title="Leave a Review" icon="star" href="/clients/reviews">
+    After the consultation, share your experience
+  </Card>
+</CardGroup>

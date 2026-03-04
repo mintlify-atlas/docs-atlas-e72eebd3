@@ -1,0 +1,229 @@
+---
+title: Environment Variables
+description: Configuration for upLegal environment variables
+---
+
+## Overview
+
+upLegal uses environment variables for configuration. Variables must be stored in a `.env.local` file in the project root.
+
+<Warning>
+  Never commit `.env.local` or any file containing secrets to version control. Ensure it's listed in `.gitignore`.
+</Warning>
+
+## Frontend vs Backend Variables
+
+### Frontend (Vite)
+
+Frontend environment variables **must** be prefixed with `VITE_` to be accessible in the client-side code:
+
+```typescript
+const apiUrl = import.meta.env.VITE_API_BASE_URL;
+```
+
+### Backend (Express/Node.js)
+
+Backend variables are accessed via `process.env` and don't require the `VITE_` prefix (though many shared variables use it):
+
+```javascript
+const supabaseUrl = process.env.VITE_SUPABASE_URL;
+```
+
+## Required Environment Variables
+
+### Supabase Configuration
+
+```bash
+# Supabase project URL
+VITE_SUPABASE_URL=https://your-project.supabase.co
+
+# Supabase anonymous/public key (for client-side)
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+# Supabase service role key (for server-side, bypasses RLS)
+VITE_SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+<Warning>
+  **Critical**: The `VITE_SUPABASE_SERVICE_ROLE_KEY` must be a **service_role** key, not an anon key. The server validates this on startup.
+</Warning>
+
+### MercadoPago Configuration
+
+```bash
+# MercadoPago access token for API requests
+VITE_MERCADOPAGO_ACCESS_TOKEN=APP_USR-...
+
+# MercadoPago OAuth credentials
+VITE_MERCADOPAGO_CLIENT_ID=1234567890
+VITE_MERCADOPAGO_CLIENT_SECRET=AbCdEfGhIjKlMnOp...
+
+# Webhook URL for payment notifications
+VITE_MERCADOPAGO_WEBHOOK_URL=https://your-backend.onrender.com/api/mercadopago/webhook
+MERCADOPAGO_WEBHOOK_URL=https://your-backend.onrender.com/api/mercadopago/webhook
+```
+
+<Note>
+  The access token should start with `APP_USR-` or `TEST-` (for sandbox). If it looks like a JWT starting with `eyJ`, it's incorrect.
+</Note>
+
+### Application URLs
+
+```bash
+# Frontend URL (where the React app is hosted)
+VITE_APP_URL=https://legalup.cl
+FRONTEND_URL=https://legalup.cl
+
+# Backend URL (where the Express server runs)
+VITE_API_BASE_URL=https://uplegal-service.onrender.com
+RENDER_EXTERNAL_URL=https://uplegal-service.onrender.com
+```
+
+### Email Configuration (Resend)
+
+```bash
+# Resend API key for sending emails
+RESEND_API_KEY=re_...
+VITE_RESEND_API_KEY=re_...
+```
+
+<Info>
+  If `RESEND_API_KEY` is not configured, the server will log a warning and emails will not be sent.
+</Info>
+
+## Optional Environment Variables
+
+### Node Environment
+
+```bash
+NODE_ENV=development  # or 'production'
+```
+
+Affects:
+- Error stack traces in API responses
+- Vite sourcemap generation
+- Build optimizations
+
+## Environment Variable Usage in Code
+
+### Server-side (server.mjs)
+
+The backend server uses these variables extensively:
+
+```javascript
+// Supabase client initialization
+const supabase = createClient(
+  process.env.VITE_SUPABASE_URL,
+  process.env.VITE_SUPABASE_SERVICE_ROLE_KEY
+);
+
+// MercadoPago configuration
+const mpClient = new MercadoPagoConfig({
+  accessToken: process.env.VITE_MERCADOPAGO_ACCESS_TOKEN
+});
+
+// App URL for redirects
+const appUrl = process.env.VITE_APP_URL || 'https://legalup.cl';
+
+// Email service
+const resendApiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY;
+```
+
+### Client-side (React/Vite)
+
+Frontend code accesses variables via `import.meta.env`:
+
+```typescript
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+```
+
+## Validation and Warnings
+
+The backend server validates critical environment variables on startup:
+
+### Missing Required Variables
+
+If `VITE_SUPABASE_URL` or `VITE_SUPABASE_SERVICE_ROLE_KEY` are missing:
+
+```
+❌ Missing required environment variables
+Process exits with code 1
+```
+
+### Service Role Key Validation
+
+The server decodes the JWT to verify it's a service_role key:
+
+```javascript
+const [, payload] = serviceRoleKey.split('.');
+const decoded = JSON.parse(Buffer.from(payload, 'base64').toString());
+if (decoded.role !== 'service_role') {
+  console.error('❌ CRITICAL: The key is NOT a service_role key!');
+}
+```
+
+### MercadoPago Token Validation
+
+The server checks if the MercadoPago token is mistakenly a Supabase JWT:
+
+```javascript
+if (mpAccessToken.startsWith('eyJ')) {
+  throw new Error('MercadoPago Token is invalid (looks like JWT)');
+}
+```
+
+### Optional Variable Warnings
+
+```
+⚠️ RESEND_API_KEY is not configured. Emails will NOT be sent.
+⚠️ MERCADOPAGO_WEBHOOK_URL is not configured. Webhooks will NOT be received.
+```
+
+## Example .env.local File
+
+```bash
+# Supabase
+VITE_SUPABASE_URL=https://abcdefghijk.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFiY2RlZmdoaWprIiwicm9sZSI6ImFub24iLCJpYXQiOjE2ODAwMDAwMDAsImV4cCI6MTk5NTU3NjAwMH0.SIGNATURE
+VITE_SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFiY2RlZmdoaWprIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTY4MDAwMDAwMCwiZXhwIjoxOTk1NTc2MDAwfQ.SERVICE_SIGNATURE
+
+# MercadoPago
+VITE_MERCADOPAGO_ACCESS_TOKEN=APP_USR-1234567890-123456-abcdef1234567890abcdef1234567890-123456789
+VITE_MERCADOPAGO_CLIENT_ID=1234567890123456
+VITE_MERCADOPAGO_CLIENT_SECRET=AbCdEfGhIjKlMnOpQrStUvWxYz1234567890
+VITE_MERCADOPAGO_WEBHOOK_URL=https://uplegal-service.onrender.com/api/mercadopago/webhook
+MERCADOPAGO_WEBHOOK_URL=https://uplegal-service.onrender.com/api/mercadopago/webhook
+
+# Application URLs
+VITE_APP_URL=https://legalup.cl
+FRONTEND_URL=https://legalup.cl
+VITE_API_BASE_URL=https://uplegal-service.onrender.com
+RENDER_EXTERNAL_URL=https://uplegal-service.onrender.com
+
+# Email
+RESEND_API_KEY=re_AbCdEfGh_1234567890ABCDEFGHIJKLMNOP
+VITE_RESEND_API_KEY=re_AbCdEfGh_1234567890ABCDEFGHIJKLMNOP
+
+# Node Environment
+NODE_ENV=development
+```
+
+## Security Best Practices
+
+<Warning>
+  **Never expose service role keys or access tokens in client-side code.**
+</Warning>
+
+1. **Service Role Keys**: Only use in backend server code. Never send to the frontend.
+2. **Anon Keys**: Safe for client-side use - they respect Row Level Security (RLS) policies.
+3. **MercadoPago Tokens**: Keep access tokens server-side. Public keys can be client-side.
+4. **.gitignore**: Ensure `.env.local`, `.env.production`, and `.env` are ignored.
+5. **Environment-specific files**: Use different credentials for development, staging, and production.
+
+## Deployment Environments
+
+See [Deployment Guide](/technical/deployment) for configuring environment variables in:
+- Netlify (frontend)
+- Render (backend)
+- Other hosting platforms

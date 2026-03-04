@@ -1,0 +1,553 @@
+---
+title: "Database Schema"
+description: "PostgreSQL database structure and table relationships in upLegal"
+icon: "database"
+---
+
+## Overview
+
+upLegal uses PostgreSQL via Supabase with Row Level Security (RLS) for access control. The database is organized into core tables for users, appointments, payments, messaging, and reviews.
+
+## Core Tables
+
+### profiles
+
+Stores user account information for both clients and lawyers.
+
+<ParamField path="user_id" type="uuid" required>
+  Primary key, references Supabase Auth user
+</ParamField>
+
+<ParamField path="email" type="string" required>
+  User's email address
+</ParamField>
+
+<ParamField path="role" type="string" required>
+  User role: `'client'` or `'lawyer'`
+</ParamField>
+
+<ParamField path="first_name" type="string">
+  User's first name
+</ParamField>
+
+<ParamField path="last_name" type="string">
+  User's last name
+</ParamField>
+
+<ParamField path="rut" type="string">
+  Chilean RUT (tax ID) for lawyers
+</ParamField>
+
+<ParamField path="pjud_verified" type="boolean" default="false">
+  Whether lawyer is verified through PJUD
+</ParamField>
+
+<ParamField path="avatar_url" type="string">
+  Profile picture URL from Supabase Storage
+</ParamField>
+
+<ParamField path="bio" type="text">
+  Lawyer bio/description
+</ParamField>
+
+<ParamField path="specialties" type="string[]">
+  Array of legal specialties (e.g., `["Derecho Civil", "Derecho Penal"]`)
+</ParamField>
+
+<ParamField path="hourly_rate_clp" type="number">
+  Lawyer's hourly rate in Chilean pesos
+</ParamField>
+
+<ParamField path="contact_fee_clp" type="number">
+  One-time fee to initiate conversation
+</ParamField>
+
+<ParamField path="location" type="string">
+  Lawyer's city/region
+</ParamField>
+
+<ParamField path="availability" type="jsonb">
+  Weekly availability grid (JSON object)
+</ParamField>
+
+<ParamField path="mercadopago_account_id" type="string">
+  MercadoPago account ID for payouts
+</ParamField>
+
+<ParamField path="balance" type="number" default="0">
+  Current balance from completed appointments
+</ParamField>
+
+<ParamField path="profile_completion" type="number" default="0">
+  Profile completion percentage (0-100)
+</ParamField>
+
+<ParamField path="created_at" type="timestamp">
+  Account creation timestamp
+</ParamField>
+
+<ParamField path="updated_at" type="timestamp">
+  Last profile update timestamp
+</ParamField>
+
+---
+
+### appointments
+
+Scheduled consultations between clients and lawyers.
+
+<ParamField path="id" type="uuid" required>
+  Primary key
+</ParamField>
+
+<ParamField path="user_id" type="uuid" required>
+  Client user ID
+</ParamField>
+
+<ParamField path="lawyer_id" type="uuid" required>
+  Lawyer user ID
+</ParamField>
+
+<ParamField path="appointment_date" type="date" required>
+  Scheduled date (YYYY-MM-DD)
+</ParamField>
+
+<ParamField path="appointment_time" type="time" required>
+  Scheduled time (HH:MM)
+</ParamField>
+
+<ParamField path="duration" type="number" required>
+  Duration in minutes (30, 60, 90, or 120)
+</ParamField>
+
+<ParamField path="consultation_type" type="string" required>
+  Type: `'video'`, `'phone'`, or `'in-person'`
+</ParamField>
+
+<ParamField path="contact_method" type="string" required>
+  Preferred contact: `'google_meet'`, `'phone'`, `'address'`
+</ParamField>
+
+<ParamField path="status" type="string" default="pending">
+  Status: `'pending'`, `'confirmed'`, `'completed'`, `'cancelled'`
+</ParamField>
+
+<ParamField path="price" type="number" required>
+  Total price in CLP
+</ParamField>
+
+<ParamField path="amount" type="number">
+  Lawyer's payout amount (80% of price)
+</ParamField>
+
+<ParamField path="currency" type="string" default="CLP">
+  Currency code
+</ParamField>
+
+<ParamField path="meet_link" type="string">
+  Google Meet link for video consultations
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Client name
+</ParamField>
+
+<ParamField path="email" type="string" required>
+  Client email
+</ParamField>
+
+<ParamField path="phone" type="string">
+  Client phone number
+</ParamField>
+
+<ParamField path="address" type="string">
+  Meeting address for in-person consultations
+</ParamField>
+
+<ParamField path="description" type="text">
+  Consultation description/notes
+</ParamField>
+
+<ParamField path="notes" type="text">
+  Lawyer's private notes
+</ParamField>
+
+---
+
+### bookings
+
+Payment-linked booking records created via MercadoPago.
+
+<ParamField path="id" type="uuid" required>
+  Primary key
+</ParamField>
+
+<ParamField path="user_id" type="uuid">
+  Client user ID (nullable for guest bookings)
+</ParamField>
+
+<ParamField path="lawyer_id" type="uuid" required>
+  Lawyer user ID, foreign key to `profiles.user_id`
+</ParamField>
+
+<ParamField path="user_name" type="string" required>
+  Client name
+</ParamField>
+
+<ParamField path="user_email" type="string" required>
+  Client email
+</ParamField>
+
+<ParamField path="scheduled_date" type="date" required>
+  Appointment date
+</ParamField>
+
+<ParamField path="scheduled_time" type="time" required>
+  Appointment time
+</ParamField>
+
+<ParamField path="duration" type="number" required>
+  Duration in minutes
+</ParamField>
+
+<ParamField path="price" type="number" required>
+  Total price paid
+</ParamField>
+
+<ParamField path="status" type="string" default="pending">
+  Booking status: `'pending'`, `'confirmed'`, `'cancelled'`
+</ParamField>
+
+<ParamField path="payment_status" type="string">
+  MercadoPago payment status: `'approved'`, `'pending'`, `'rejected'`
+</ParamField>
+
+<ParamField path="payment_id" type="string">
+  MercadoPago payment ID
+</ParamField>
+
+<ParamField path="mercadopago_preference_id" type="string">
+  MercadoPago payment preference ID
+</ParamField>
+
+<ParamField path="confirmed_at" type="timestamp">
+  Timestamp when booking was confirmed
+</ParamField>
+
+<ParamField path="cancelled_at" type="timestamp">
+  Timestamp when booking was cancelled
+</ParamField>
+
+---
+
+### messages
+
+Real-time chat messages between clients and lawyers.
+
+<ParamField path="id" type="uuid" required>
+  Primary key
+</ParamField>
+
+<ParamField path="conversation_id" type="uuid" required>
+  Foreign key to `conversations.id`
+</ParamField>
+
+<ParamField path="sender_id" type="uuid" required>
+  User ID of message sender
+</ParamField>
+
+<ParamField path="content" type="text" required>
+  Message text content
+</ParamField>
+
+<ParamField path="status" type="string" default="sent">
+  Message status: `'sending'`, `'sent'`, `'delivered'`, `'read'`
+</ParamField>
+
+<ParamField path="attachment_url" type="string">
+  URL to file attachment (if any)
+</ParamField>
+
+<ParamField path="created_at" type="timestamp">
+  Message timestamp
+</ParamField>
+
+<ParamField path="read_at" type="timestamp">
+  Timestamp when message was read
+</ParamField>
+
+---
+
+### conversations
+
+Message threads between clients and lawyers.
+
+<ParamField path="id" type="uuid" required>
+  Primary key
+</ParamField>
+
+<ParamField path="client_id" type="uuid" required>
+  Client user ID
+</ParamField>
+
+<ParamField path="lawyer_id" type="uuid" required>
+  Lawyer user ID
+</ParamField>
+
+<ParamField path="contact_fee_paid" type="boolean" default="false">
+  Whether client has paid contact fee to initiate conversation
+</ParamField>
+
+<ParamField path="last_message_at" type="timestamp">
+  Timestamp of most recent message
+</ParamField>
+
+<ParamField path="created_at" type="timestamp">
+  Conversation creation timestamp
+</ParamField>
+
+---
+
+### reviews
+
+Client reviews and ratings for lawyers.
+
+<ParamField path="id" type="uuid" required>
+  Primary key
+</ParamField>
+
+<ParamField path="lawyer_id" type="uuid" required>
+  Lawyer being reviewed
+</ParamField>
+
+<ParamField path="client_id" type="uuid" required>
+  Client who wrote the review
+</ParamField>
+
+<ParamField path="appointment_id" type="uuid">
+  Related appointment (if applicable)
+</ParamField>
+
+<ParamField path="rating" type="number" required>
+  Star rating (1-5)
+</ParamField>
+
+<ParamField path="comment" type="text" required>
+  Written review (max 1,000 characters)
+</ParamField>
+
+<ParamField path="status" type="string" default="pending">
+  Review status: `'pending'`, `'approved'`, `'rejected'`
+</ParamField>
+
+<ParamField path="helpful_count" type="number" default="0">
+  Number of "helpful" votes
+</ParamField>
+
+<ParamField path="created_at" type="timestamp">
+  Review creation timestamp
+</ParamField>
+
+---
+
+### payments
+
+Payment transaction records.
+
+<ParamField path="id" type="uuid" required>
+  Primary key
+</ParamField>
+
+<ParamField path="user_id" type="uuid" required>
+  Client user ID
+</ParamField>
+
+<ParamField path="lawyer_id" type="uuid" required>
+  Lawyer user ID
+</ParamField>
+
+<ParamField path="amount" type="number" required>
+  Payment amount in CLP
+</ParamField>
+
+<ParamField path="platform_fee" type="number" required>
+  Platform fee (10% of amount)
+</ParamField>
+
+<ParamField path="lawyer_amount" type="number" required>
+  Lawyer payout amount (90% of amount)
+</ParamField>
+
+<ParamField path="payment_type" type="string" required>
+  Type: `'appointment'`, `'contact_fee'`, `'consultation'`
+</ParamField>
+
+<ParamField path="status" type="string" default="pending">
+  Status: `'pending'`, `'approved'`, `'rejected'`, `'refunded'`
+</ParamField>
+
+<ParamField path="mercadopago_payment_id" type="string">
+  MercadoPago payment ID
+</ParamField>
+
+<ParamField path="created_at" type="timestamp">
+  Payment timestamp
+</ParamField>
+
+---
+
+### notifications
+
+In-app notification queue.
+
+<ParamField path="id" type="uuid" required>
+  Primary key
+</ParamField>
+
+<ParamField path="user_id" type="uuid" required>
+  Recipient user ID
+</ParamField>
+
+<ParamField path="type" type="string" required>
+  Notification type: `'appointment'`, `'message'`, `'payment'`, `'system'`
+</ParamField>
+
+<ParamField path="title" type="string" required>
+  Notification title
+</ParamField>
+
+<ParamField path="message" type="text" required>
+  Notification content
+</ParamField>
+
+<ParamField path="read" type="boolean" default="false">
+  Whether notification has been read
+</ParamField>
+
+<ParamField path="action_url" type="string">
+  URL to navigate to when clicked
+</ParamField>
+
+<ParamField path="created_at" type="timestamp">
+  Notification timestamp
+</ParamField>
+
+## Table Relationships
+
+```
+profiles (user_id)
+  ├─── appointments.user_id (client)
+  ├─── appointments.lawyer_id (lawyer)
+  ├─── bookings.user_id (client)
+  ├─── bookings.lawyer_id (lawyer) [FK]
+  ├─── conversations.client_id
+  ├─── conversations.lawyer_id
+  ├─── messages.sender_id
+  ├─── reviews.lawyer_id
+  ├─── reviews.client_id
+  ├─── payments.user_id
+  ├─── payments.lawyer_id
+  └─── notifications.user_id
+
+conversations (id)
+  └─── messages.conversation_id [FK]
+
+appointments (id)
+  └─── reviews.appointment_id
+```
+
+## Row Level Security (RLS)
+
+All tables have RLS policies enabled:
+
+<AccordionGroup>
+  <Accordion title="profiles">
+    - Users can read all public lawyer profiles
+    - Users can update only their own profile
+    - Service role can perform all operations
+  </Accordion>
+  
+  <Accordion title="appointments">
+    - Clients can read/update their own appointments
+    - Lawyers can read/update appointments where they are the lawyer
+    - Service role can perform all operations
+  </Accordion>
+  
+  <Accordion title="messages">
+    - Users can only read messages in conversations they participate in
+    - Users can only create messages in their own conversations
+    - Service role can perform all operations
+  </Accordion>
+  
+  <Accordion title="reviews">
+    - All users can read approved reviews
+    - Clients can create reviews for completed appointments
+    - Lawyers cannot edit or delete reviews
+    - Service role can moderate reviews
+  </Accordion>
+  
+  <Accordion title="payments">
+    - Clients can read their own payment history
+    - Lawyers can read payments where they are the lawyer
+    - No client/lawyer write access (server-side only)
+    - Service role can perform all operations
+  </Accordion>
+</AccordionGroup>
+
+## Indexes
+
+Key indexes for query performance:
+
+- `profiles.email` - Unique index
+- `profiles.role` - Filter by user type
+- `profiles.pjud_verified` - Filter verified lawyers
+- `appointments.lawyer_id` - Lawyer's appointments
+- `appointments.user_id` - Client's appointments
+- `appointments.appointment_date` - Date-based queries
+- `messages.conversation_id` - Conversation messages
+- `messages.created_at` - Message ordering
+- `reviews.lawyer_id` - Lawyer reviews
+- `bookings.payment_id` - Payment reconciliation
+
+## Database Functions
+
+Custom PostgreSQL functions:
+
+### `get_lawyer_earnings(lawyer_id UUID)`
+
+Calculates total earnings for a lawyer from completed appointments.
+
+```sql
+SELECT get_lawyer_earnings('uuid-here');
+-- Returns: { total: 450000, pending: 0, paid: 450000 }
+```
+
+## Migrations
+
+Database schema is versioned using Supabase migrations in `/supabase/migrations/`:
+
+- Initial schema setup
+- Profile table with RLS policies
+- Payment tables and earnings functions
+- Storage buckets for avatars
+- Appointment and booking tables
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="API Reference" icon="code" href="/api/authentication">
+    Explore API endpoints for database operations
+  </Card>
+  
+  <Card title="Supabase Integration" icon="database" href="/integrations/supabase">
+    Learn how to query the database with Supabase client
+  </Card>
+  
+  <Card title="Architecture" icon="diagram-project" href="/technical/architecture">
+    Understand the overall system architecture
+  </Card>
+  
+  <Card title="Local Setup" icon="code" href="/technical/local-setup">
+    Set up the database for local development
+  </Card>
+</CardGroup>

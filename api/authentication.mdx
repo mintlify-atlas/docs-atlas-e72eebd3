@@ -1,0 +1,149 @@
+---
+title: Authentication
+description: Authentication endpoints and flows for upLegal
+icon: lock
+---
+
+# Authentication
+
+upLegal uses Supabase authentication for user management. Authentication is required for most endpoints and is handled through session tokens.
+
+## Authentication Methods
+
+### Email/Password Login
+
+Standard email and password authentication.
+
+```typescript
+const { data, error } = await supabase.auth.signInWithPassword({
+  email: 'user@example.com',
+  password: 'password123'
+});
+```
+
+### Magic Link Login
+
+Passwordless authentication via email magic link.
+
+```typescript
+const { data, error } = await supabase.auth.signInWithOtp({
+  email: 'user@example.com',
+  options: {
+    emailRedirectTo: 'https://legalup.cl/dashboard'
+  }
+});
+```
+
+## Session Management
+
+### Get Current Session
+
+Retrieve the current user session.
+
+```typescript
+const { data: { session }, error } = await supabase.auth.getSession();
+```
+
+**Response**
+
+<ResponseField name="session" type="object">
+  Current session object
+  
+  <ResponseField name="user" type="object">
+    Authenticated user information
+    
+    <ResponseField name="id" type="string">
+      User ID (UUID)
+    </ResponseField>
+    
+    <ResponseField name="email" type="string">
+      User email address
+    </ResponseField>
+    
+    <ResponseField name="user_metadata" type="object">
+      User metadata including role, name, etc.
+    </ResponseField>
+  </ResponseField>
+  
+  <ResponseField name="access_token" type="string">
+    JWT access token for API requests
+  </ResponseField>
+  
+  <ResponseField name="refresh_token" type="string">
+    Token for refreshing the session
+  </ResponseField>
+  
+  <ResponseField name="expires_at" type="number">
+    Session expiration timestamp
+  </ResponseField>
+</ResponseField>
+
+### Refresh Session
+
+Refresh an expired session using the refresh token.
+
+```typescript
+const { data, error } = await supabase.auth.refreshSession();
+```
+
+### Sign Out
+
+End the current user session.
+
+```typescript
+const { error } = await supabase.auth.signOut();
+```
+
+## User Roles
+
+upLegal supports two user roles:
+
+- **client**: Standard users seeking legal services
+- **lawyer**: Legal professionals offering services
+
+Roles are stored in `user_metadata.role` and synchronized to the `profiles` table.
+
+## Protected Routes
+
+Most API endpoints require authentication. Include the session token in your requests:
+
+```typescript
+const { data: { session } } = await supabase.auth.getSession();
+
+fetch('https://api.legalup.cl/api/endpoint', {
+  headers: {
+    'Authorization': `Bearer ${session?.access_token}`,
+    'Content-Type': 'application/json'
+  }
+});
+```
+
+## Error Responses
+
+<ResponseField name="error" type="object">
+  Error details
+  
+  <ResponseField name="message" type="string">
+    Human-readable error message in Spanish
+  </ResponseField>
+  
+  <ResponseField name="status" type="number">
+    HTTP status code
+  </ResponseField>
+</ResponseField>
+
+### Common Authentication Errors
+
+| Status Code | Error Message | Description |
+|------------|---------------|-------------|
+| 401 | `Invalid login credentials` | Wrong email or password |
+| 401 | `Email not confirmed` | User hasn't verified their email |
+| 403 | `Unauthorized` | Missing or invalid access token |
+| 429 | `Too many requests` | Rate limit exceeded |
+
+## Security Notes
+
+- Sessions expire after 1 hour of inactivity
+- Refresh tokens are valid for 30 days
+- All authentication endpoints use HTTPS only
+- Row Level Security (RLS) policies enforce data access control

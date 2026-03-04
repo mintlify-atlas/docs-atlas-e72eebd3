@@ -1,0 +1,400 @@
+---
+title: 'Resend Email Service'
+description: 'Email delivery integration using Resend for transactional emails and notifications'
+---
+
+# Resend Email Service
+
+upLegal uses Resend for all transactional email delivery, including booking confirmations, welcome emails, and lawyer notifications.
+
+## Setup
+
+### Environment Variables
+
+Configure your Resend API key:
+
+```bash
+RESEND_API_KEY=re_your_api_key_here
+# Or for Vite projects:
+VITE_RESEND_API_KEY=re_your_api_key_here
+```
+
+<Info>
+  Get your API key from [resend.com/api-keys](https://resend.com/api-keys) after creating an account.
+</Info>
+
+### Domain Configuration
+
+Verify your sending domain in Resend:
+
+1. Add your domain (e.g., `legalup.cl`)
+2. Add DNS records for verification
+3. Use verified domains in the `from` field:
+   - `LegalUp <hola@mg.legalup.cl>`
+   - `LegalUp <servicios@mg.legalup.cl>`
+   - `Bienvenido a LegalUp <bienvenida@legalup.app>`
+
+## Installation
+
+```bash
+npm install resend
+```
+
+## Basic Usage
+
+### Initialize Resend Client
+
+```typescript
+import { Resend } from 'resend';
+
+const resend = new Resend(import.meta.env.RESEND_API_KEY);
+```
+
+### Send Simple Email
+
+```typescript
+const { data, error } = await resend.emails.send({
+  from: 'LegalUp <hola@mg.legalup.cl>',
+  to: 'user@example.com',
+  subject: 'Bienvenido a LegalUp',
+  html: '<h1>¡Hola!</h1><p>Gracias por registrarte.</p>',
+});
+
+if (error) {
+  console.error('Error sending email:', error);
+} else {
+  console.log('Email sent:', data.id);
+}
+```
+
+## Email Templates
+
+### Welcome Email
+
+Send welcome emails to new users:
+
+```typescript
+// src/lib/emails/welcomeEmail.ts
+import { Resend } from 'resend';
+
+const resend = new Resend(import.meta.env.RESEND_API_KEY);
+
+export async function sendWelcomeEmail(email: string, name: string) {
+  try {
+    const { data, error } = await resend.emails.send({
+      from: 'Bienvenido a LegalUp <bienvenida@legalup.app>',
+      to: email,
+      subject: '¡Bienvenido a LegalUp! Confirma tu correo electrónico',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h1 style="color: #2563eb;">¡Bienvenido a LegalUp, ${name}!</h1>
+          <p>Gracias por registrarte en nuestra plataforma. Estamos encantados de tenerte con nosotros.</p>
+          <p>Para comenzar a utilizar todos los beneficios de LegalUp, por favor confirma tu dirección de correo electrónico haciendo clic en el siguiente botón:</p>
+          <a href="${window.location.origin}/auth/confirm-email" 
+             style="display: inline-block; padding: 12px 24px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 4px; margin: 20px 0;">
+            Confirmar correo electrónico
+          </a>
+          <p>Si no creaste esta cuenta, puedes ignorar este correo.</p>
+          <p>¡Esperamos que disfrutes de nuestra plataforma!</p>
+          <p>El equipo de LegalUp</p>
+        </div>
+      `,
+    });
+
+    return { data, error };
+  } catch (error) {
+    return { error };
+  }
+}
+```
+
+### Lawyer Services Email
+
+Prompt lawyers to add their services:
+
+```typescript
+// src/lib/emails/sendLawyerServicesEmail.ts
+import { Resend } from 'resend';
+import { getLawyerServicesEmail } from './lawyerServicesEmail';
+
+const getResendApiKey = () => {
+  const key = import.meta.env?.VITE_RESEND_API_KEY || process.env?.RESEND_API_KEY;
+  if (!key) {
+    throw new Error('VITE_RESEND_API_KEY is not set');
+  }
+  return key;
+};
+
+export async function sendLawyerServicesEmail(to: string, lawyerName: string) {
+  try {
+    const resend = new Resend(getResendApiKey());
+    
+    const { data, error } = await resend.emails.send({
+      from: 'LegalUp <servicios@mg.legalup.cl>',
+      to: [to],
+      subject: '¡Completa tu perfil en LegalUp!',
+      html: getLawyerServicesEmail(lawyerName),
+    });
+
+    if (error) {
+      console.error('❌ Error sending email:', error);
+      return { success: false, error };
+    }
+
+    console.log('✅ Email sent successfully');
+    return { success: true, data };
+  } catch (error) {
+    console.error('❌ Unexpected error:', error);
+    return { success: false, error };
+  }
+}
+```
+
+### Lawyer Services Email Template
+
+```typescript
+// src/lib/emails/lawyerServicesEmail.ts
+export function getLawyerServicesEmail(lawyerName: string) {
+  return `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+      <div style="text-align: center; margin-bottom: 20px;">
+        <h1 style="color: #2563eb;">¡Hola ${lawyerName}!</h1>
+      </div>
+      
+      <p>¡Bienvenido a LegalUp! Notamos que aún no has agregado tus servicios a la plataforma.</p>
+      
+      <p>Agregar tus servicios es una excelente manera de:</p>
+      <ul style="margin: 15px 0; padding-left: 20px;">
+        <li>Mostrar tus especialidades legales</li>
+        <li>Atraer a más clientes</li>
+        <li>Destacar entre otros abogados</li>
+      </ul>
+
+      <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0;">
+        <h3 style="margin-top: 0;">Ejemplo de servicio destacado:</h3>
+        <p><strong>Nombre del servicio:</strong> Asesoría Laboral Inicial</p>
+        <p><strong>Descripción:</strong> Asesoría personalizada sobre temas laborales, incluyendo despidos, finiquitos y derechos del trabajador.</p>
+        <p><strong>Duración:</strong> 60 minutos</p>
+        <p><strong>Precio:</strong> $50.000 CLP</p>
+      </div>
+
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="https://legalup.cl/dashboard/services" 
+           style="display: inline-block; padding: 12px 24px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 6px; font-weight: 500;">
+          Agregar mis servicios ahora
+        </a>
+      </div>
+
+      <p>Si necesitas ayuda para configurar tus servicios, no dudes en responder a este correo.</p>
+      
+      <p>¡Esperamos verte pronto en la plataforma!</p>
+      
+      <p>Saludos,<br>El equipo de LegalUp</p>
+      
+      <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b;">
+        <p>© ${new Date().getFullYear()} LegalUp. Todos los derechos reservados.</p>
+        <p>Si no deseas recibir más correos como este, <a href="https://legalup.cl/preferencias" style="color: #2563eb;">actualiza tus preferencias</a>.</p>
+      </div>
+    </div>
+  `;
+}
+```
+
+## Server-Side Email Sending
+
+### Booking Confirmation Email
+
+Send confirmation emails after successful payment:
+
+```javascript
+// server.mjs
+import { Resend } from 'resend';
+
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+// In webhook handler
+app.post('/api/mercadopago/webhook', async (req, res) => {
+  // ... payment processing ...
+  
+  if (payment.status === 'approved') {
+    // Generate magic link
+    const { data: linkData } = await supabase.auth.admin.generateLink({
+      type: 'magiclink',
+      email: userEmail,
+      options: { redirectTo: `${appUrl}/dashboard/appointments` },
+    });
+    
+    const magicLink = linkData.properties.action_link;
+    
+    // Send to client
+    await resend.emails.send({
+      from: 'LegalUp <hola@mg.legalup.cl>',
+      to: userEmail,
+      subject: '¡Tu asesoría está confirmada!',
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <h1 style="color: #2563eb;">¡Reserva Confirmada!</h1>
+          <p>Hola <strong>${userName}</strong>,</p>
+          <p>Tu asesoría ha sido confirmada exitosamente.</p>
+          
+          <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 5px 0;"><strong>Fecha:</strong> ${booking.scheduled_date}</p>
+            <p style="margin: 5px 0;"><strong>Hora:</strong> ${booking.scheduled_time}</p>
+            <p style="margin: 5px 0;"><strong>Duración:</strong> ${booking.duration} min</p>
+          </div>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${magicLink}" style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+              Ingresar a mi cuenta y ver detalles
+            </a>
+          </div>
+        </div>
+      `,
+    });
+    
+    // Send to lawyer
+    await resend.emails.send({
+      from: 'LegalUp <hola@mg.legalup.cl>',
+      to: lawyerEmail,
+      subject: 'Nueva reserva confirmada',
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <h1 style="color: #2563eb;">¡Nueva Reserva!</h1>
+          <p>Has recibido una nueva reserva confirmada.</p>
+          
+          <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 5px 0;"><strong>Cliente:</strong> ${userName}</p>
+            <p style="margin: 5px 0;"><strong>Email:</strong> ${userEmail}</p>
+            <p style="margin: 5px 0;"><strong>Fecha:</strong> ${booking.scheduled_date}</p>
+            <p style="margin: 5px 0;"><strong>Hora:</strong> ${booking.scheduled_time}</p>
+          </div>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${appUrl}/dashboard/appointments" style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+              Ir a mis citas
+            </a>
+          </div>
+        </div>
+      `,
+    });
+  }
+});
+```
+
+## Error Handling
+
+Always handle Resend errors gracefully:
+
+```typescript
+try {
+  const { data, error } = await resend.emails.send({
+    from: 'LegalUp <hola@mg.legalup.cl>',
+    to: email,
+    subject: 'Test Email',
+    html: '<p>Test</p>',
+  });
+
+  if (error) {
+    console.error('Resend API error:', error);
+    return { success: false, error: error.message };
+  }
+
+  console.log('Email sent successfully:', data.id);
+  return { success: true, messageId: data.id };
+} catch (error) {
+  console.error('Unexpected error sending email:', error);
+  return { success: false, error: 'Failed to send email' };
+}
+```
+
+## Bulk Email Sending
+
+Notify multiple lawyers:
+
+```javascript
+app.post('/api/admin/notify-lawyers', async (req, res) => {
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('email, first_name, last_name')
+    .eq('role', 'lawyer')
+    .is('has_services', false);
+
+  const results = [];
+  
+  for (const profile of profiles) {
+    try {
+      await resend.emails.send({
+        from: 'LegalUp <servicios@mg.legalup.cl>',
+        to: profile.email,
+        subject: '¡Completa tu perfil!',
+        html: getLawyerServicesEmail(profile.first_name),
+      });
+      
+      results.push({ email: profile.email, success: true });
+    } catch (error) {
+      results.push({ email: profile.email, success: false, error });
+    }
+  }
+  
+  res.json({ results });
+});
+```
+
+## Best Practices
+
+<Check>
+  - Always use verified domains in the `from` field
+  - Include unsubscribe links in marketing emails
+  - Use descriptive subject lines
+  - Test emails before sending to users
+  - Log email IDs for tracking
+  - Handle errors gracefully
+  - Use environment variables for API keys
+  - Separate email templates from logic
+</Check>
+
+## Testing
+
+Test email delivery in development:
+
+```typescript
+const testEmail = async () => {
+  const result = await sendWelcomeEmail(
+    'test@example.com',
+    'Test User'
+  );
+  
+  if (result.error) {
+    console.error('Test failed:', result.error);
+  } else {
+    console.log('Test email sent:', result.data.id);
+  }
+};
+```
+
+## Rate Limits
+
+Resend rate limits:
+- Free tier: 100 emails/day
+- Paid plans: Higher limits based on plan
+
+Implement rate limiting:
+
+```typescript
+const emailQueue = [];
+let lastSent = Date.now();
+
+const sendWithRateLimit = async (emailData) => {
+  const now = Date.now();
+  const timeSinceLastEmail = now - lastSent;
+  
+  if (timeSinceLastEmail < 1000) {
+    await new Promise(resolve => setTimeout(resolve, 1000 - timeSinceLastEmail));
+  }
+  
+  const result = await resend.emails.send(emailData);
+  lastSent = Date.now();
+  
+  return result;
+};
+```

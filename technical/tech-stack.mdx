@@ -1,0 +1,303 @@
+---
+title: "Technology Stack"
+description: "Complete list of technologies, frameworks, and services powering upLegal"
+icon: "layer-group"
+---
+
+## Overview
+
+upLegal is built with modern web technologies focused on developer experience, performance, and scalability.
+
+## Frontend Stack
+
+### Core Framework
+
+<CardGroup cols={2}>
+  <Card title="React 18.3" icon="react">
+    Component-based UI library with hooks, concurrent features, and automatic batching.
+  </Card>
+  
+  <Card title="TypeScript 5.9" icon="code">
+    Type-safe JavaScript with static type checking and enhanced IDE support.
+  </Card>
+  
+  <Card title="Vite 5.4" icon="bolt">
+    Next-generation frontend build tool with instant HMR and optimized production builds.
+  </Card>
+  
+  <Card title="React Router 6.26" icon="route">
+    Declarative routing for single-page applications with nested routes.
+  </Card>
+</CardGroup>
+
+### UI & Styling
+
+| Package | Version | Purpose |
+|---------|---------|----------|
+| **Tailwind CSS** | 3.4.11 | Utility-first CSS framework |
+| **Radix UI** | Various | Accessible, unstyled UI primitives |
+| **shadcn/ui** | Latest | Pre-built components using Radix + Tailwind |
+| **Framer Motion** | 12.23 | Animation library for React |
+| **Lucide React** | 0.462 | Beautiful icon set (2000+ icons) |
+| **class-variance-authority** | 0.7 | Component variant utilities |
+| **tailwind-merge** | 2.5 | Merge Tailwind classes without conflicts |
+| **tailwindcss-animate** | 1.0 | Animation utilities for Tailwind |
+
+### Radix UI Components
+
+upLegal uses 20+ Radix UI primitives for accessible, unstyled components:
+
+<AccordionGroup>
+  <Accordion title="Dialog & Overlay Components">
+    - `@radix-ui/react-dialog` - Modals and dialogs
+    - `@radix-ui/react-alert-dialog` - Confirmation dialogs
+    - `@radix-ui/react-popover` - Floating content
+    - `@radix-ui/react-hover-card` - Hover tooltips
+    - `@radix-ui/react-tooltip` - Accessible tooltips
+    - `@radix-ui/react-context-menu` - Right-click menus
+    - `@radix-ui/react-dropdown-menu` - Dropdown menus
+    - `@radix-ui/react-menubar` - Menu bars
+  </Accordion>
+  
+  <Accordion title="Form Components">
+    - `@radix-ui/react-checkbox` - Checkbox inputs
+    - `@radix-ui/react-radio-group` - Radio button groups
+    - `@radix-ui/react-select` - Select dropdowns
+    - `@radix-ui/react-slider` - Range sliders
+    - `@radix-ui/react-switch` - Toggle switches
+    - `@radix-ui/react-label` - Form labels
+  </Accordion>
+  
+  <Accordion title="Layout Components">
+    - `@radix-ui/react-accordion` - Collapsible sections
+    - `@radix-ui/react-collapsible` - Show/hide content
+    - `@radix-ui/react-tabs` - Tabbed interfaces
+    - `@radix-ui/react-scroll-area` - Custom scrollbars
+    - `@radix-ui/react-separator` - Visual dividers
+    - `@radix-ui/react-navigation-menu` - Navigation menus
+  </Accordion>
+  
+  <Accordion title="Feedback Components">
+    - `@radix-ui/react-toast` - Toast notifications
+    - `@radix-ui/react-progress` - Progress bars
+    - `@radix-ui/react-avatar` - User avatars
+    - `@radix-ui/react-aspect-ratio` - Aspect ratio containers
+  </Accordion>
+</AccordionGroup>
+
+### State Management
+
+| Package | Version | Purpose |
+|---------|---------|----------|
+| **@tanstack/react-query** | 5.56 | Server state management & caching |
+| **React Context API** | Built-in | Auth, messages, notifications |
+| **React Hook Form** | 7.53 | Performant form state management |
+| **Zod** | 3.25 | TypeScript-first schema validation |
+| **@hookform/resolvers** | 3.9 | Validation resolver for React Hook Form |
+
+### Data & Charts
+
+- **Recharts** 2.12 - Composable charting library (earnings, analytics)
+- **@tanstack/react-virtual** 3.13 - Virtual scrolling for large lists
+- **react-window** 2.2 - Efficient rendering of large datasets
+- **react-virtualized-auto-sizer** 1.0 - Auto-sizing for virtualized components
+
+### Date & Time
+
+- **date-fns** 4.1 - Modern date utility library
+- **date-fns-tz** 3.2 - Time zone support for date-fns
+- **react-day-picker** 9.11 - Date picker component
+
+### Additional UI Libraries
+
+- **Swiper** 12.1 - Modern touch slider
+- **embla-carousel-react** 8.3 - Lightweight carousel
+- **react-dropzone** 14.3 - Drag-and-drop file uploads
+- **react-resizable-panels** 2.1 - Resizable panel layouts
+- **input-otp** 1.2 - OTP input component
+- **cmdk** 1.0 - Command menu component
+- **Sonner** 1.5 - Toast notification library
+- **Vaul** 0.9 - Drawer component
+
+### Developer Tools
+
+- **react-intersection-observer** 9.16 - Detect element visibility
+- **react-helmet-async** 2.0 - Document head management
+- **react-ga4** 2.1 - Google Analytics 4 integration
+
+## Backend Stack
+
+### Server Framework
+
+<CardGroup cols={2}>
+  <Card title="Express 5.1" icon="server">
+    Fast, unopinionated web framework for Node.js with routing and middleware.
+  </Card>
+  
+  <Card title="Node.js 18+" icon="node">
+    JavaScript runtime for server-side execution.
+  </Card>
+</CardGroup>
+
+### Server Dependencies
+
+| Package | Version | Purpose |
+|---------|---------|----------|
+| **dotenv** | 17.2 | Environment variable loading |
+| **cors** | 2.8 | Cross-origin resource sharing |
+| **cookie-parser** | 1.4 | Parse HTTP cookies |
+| **axios** | 1.12 | HTTP client for API requests |
+| **axios-cookiejar-support** | 6.0 | Cookie jar for axios |
+| **tough-cookie** | 6.0 | HTTP cookie parsing |
+| **node-fetch** | 3.3 | Fetch API for Node.js |
+| **cheerio** | 1.1 | HTML parsing (PJUD scraping) |
+| **node-cron** | 4.2 | Scheduled task execution |
+
+## Database & Backend Services
+
+### Supabase Stack
+
+<CardGroup cols={2}>
+  <Card title="@supabase/supabase-js" icon="database">
+    Official JavaScript client for Supabase (PostgreSQL, Auth, Storage, Real-time).
+  </Card>
+  
+  <Card title="PostgreSQL" icon="database">
+    Open-source relational database with JSON support and advanced features.
+  </Card>
+</CardGroup>
+
+**Supabase Features Used**:
+- **Authentication**: Email/password, magic links, JWT sessions
+- **Database**: PostgreSQL with Row Level Security (RLS)
+- **Storage**: S3-compatible object storage
+- **Real-time**: WebSocket subscriptions
+- **Edge Functions**: Serverless functions (planned)
+
+## Third-Party Integrations
+
+### Payment Processing
+
+- **mercadopago** 2.10 - MercadoPago SDK for payments and OAuth
+- **@types/mercadopago** 1.5 - TypeScript types
+
+### Email Service
+
+- **resend** 6.0 - Modern email API for transactional emails
+
+### Analytics
+
+- **react-ga4** 2.1 - Google Analytics 4 tracking
+
+### Calendar & Video
+
+- Google Meet (API integration)
+- Google Calendar (integration planned)
+
+### Lawyer Verification
+
+- PJUD (Poder Judicial de Chile) - RUT verification via web scraping
+
+## Build Tools & Development
+
+### Build & Bundling
+
+| Tool | Version | Purpose |
+|------|---------|----------|
+| **Vite** | 5.4 | Build tool & dev server |
+| **@vitejs/plugin-react-swc** | 3.5 | Fast React refresh with SWC |
+| **TypeScript** | 5.9 | Type checking & compilation |
+| **PostCSS** | 8.4 | CSS transformations |
+| **Autoprefixer** | 10.4 | Add vendor prefixes to CSS |
+| **Terser** | 5.44 | JavaScript minification |
+
+### Code Quality
+
+- **ESLint** 9.9 - JavaScript/TypeScript linting
+- **typescript-eslint** 8.0 - TypeScript ESLint rules
+- **eslint-plugin-react-hooks** 5.1 - React hooks linting
+- **eslint-plugin-react-refresh** 0.4 - React Fast Refresh validation
+
+### Type Definitions
+
+- `@types/node` - Node.js type definitions
+- `@types/react` - React type definitions
+- `@types/react-dom` - React DOM type definitions
+- `@types/cheerio` - Cheerio type definitions
+- `@types/lodash` - Lodash type definitions
+- `@types/uuid` - UUID type definitions
+- `@types/tough-cookie` - Cookie type definitions
+
+## Deployment Stack
+
+<CardGroup cols={3}>
+  <Card title="Netlify" icon="cloud">
+    Frontend hosting with CDN, automatic deployments, and serverless functions.
+  </Card>
+  
+  <Card title="Render" icon="server">
+    Backend hosting for Express server with auto-scaling and health checks.
+  </Card>
+  
+  <Card title="Supabase Cloud" icon="database">
+    Managed PostgreSQL database with global edge network.
+  </Card>
+</CardGroup>
+
+## Development Utilities
+
+- **concurrently** - Run multiple npm scripts simultaneously
+- **ts-node** 10.9 - TypeScript execution for Node.js
+- **micro** 10.0 - Async HTTP microservices
+
+## Package Manager
+
+upLegal supports multiple package managers:
+
+<CodeGroup>
+```bash npm
+npm install
+```
+
+```bash yarn
+yarn install
+```
+
+```bash pnpm
+pnpm install
+```
+
+```bash bun
+bun install
+```
+</CodeGroup>
+
+<Info>
+The project includes both `package-lock.json` and `bun.lockb`, indicating support for npm and Bun package managers.
+</Info>
+
+## Version Requirements
+
+- **Node.js**: 18.0.0 or higher (recommended: 20.x LTS)
+- **npm**: 8.0.0 or higher
+- **TypeScript**: 5.9+
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Architecture Overview" icon="diagram-project" href="/technical/architecture">
+    Understand how all these technologies work together
+  </Card>
+  
+  <Card title="Local Setup" icon="code" href="/technical/local-setup">
+    Install dependencies and run upLegal locally
+  </Card>
+  
+  <Card title="Database Schema" icon="database" href="/technical/database-schema">
+    Explore the PostgreSQL database structure
+  </Card>
+  
+  <Card title="Environment Variables" icon="key" href="/technical/environment-variables">
+    Configure required environment variables
+  </Card>
+</CardGroup>

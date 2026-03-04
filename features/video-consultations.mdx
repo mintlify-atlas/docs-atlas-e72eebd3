@@ -1,0 +1,341 @@
+---
+title: 'Video Consultations'
+description: 'Integrated Google Meet video consultation system for remote legal services'
+icon: 'video'
+---
+
+## Overview
+
+upLegal integrates with Google Meet to provide seamless video consultation capabilities. Lawyers and clients can conduct remote legal consultations with automatic meeting link generation and calendar integration.
+
+## Google Meet Integration
+
+The platform uses Google Meet as the video consultation provider, offering:
+
+- **No Additional Software**: Clients use familiar Google Meet interface
+- **Calendar Integration**: Automatic Google Calendar event creation
+- **Reliable Infrastructure**: Built on Google's enterprise-grade video platform
+- **Mobile Support**: Works on desktop and mobile devices
+
+## Meeting Link Generation
+
+Automatic meeting link creation for scheduled consultations:
+
+```typescript
+generateGoogleMeetLink(
+  title: string = 'Reunión Legal',
+  date?: Date,
+  duration: number = 60
+): string
+```
+
+### Parameters
+
+<ParamField path="title" type="string" default="Reunión Legal">
+  Title of the legal consultation meeting
+</ParamField>
+
+<ParamField path="date" type="Date" optional>
+  Scheduled date and time for the consultation
+</ParamField>
+
+<ParamField path="duration" type="number" default="60">
+  Duration in minutes (typically 30, 60, or 90 minutes)
+</ParamField>
+
+### Return Value
+
+Returns a Google Meet URL:
+
+- **Without Date**: Returns instant meeting link (`https://meet.google.com/new`)
+- **With Date**: Returns Google Calendar link with embedded Meet URL
+
+## Calendar Integration
+
+When a date is provided, the system creates a Google Calendar event:
+
+```typescript
+const meetUrl = generateGoogleMeetLink(
+  'Consulta Legal - Derecho de Familia',
+  new Date('2024-09-15T15:00:00'),
+  60
+);
+
+// Returns:
+// https://calendar.google.com/calendar/render?
+//   action=TEMPLATE&
+//   text=Consulta Legal - Derecho de Familia&
+//   dates=20240915T150000Z/20240915T160000Z&
+//   details=Reunión programada a través de LegalUp&
+//   add=google.com
+```
+
+### Calendar Event Details
+
+<Steps>
+  <Step title="Event Creation">
+    Client clicks consultation link and Google Calendar opens
+  </Step>
+  
+  <Step title="Event Details">
+    Pre-filled with:
+    - Consultation title
+    - Scheduled date and time
+    - Duration
+    - Description: "Reunión programada a través de LegalUp"
+    - Automatic Google Meet link
+  </Step>
+  
+  <Step title="Confirmation">
+    Client confirms and saves to their calendar
+  </Step>
+  
+  <Step title="Notifications">
+    Google Calendar sends automatic reminders before the meeting
+  </Step>
+</Steps>
+
+## Meeting URL Format
+
+Google Meet URLs follow this pattern:
+
+```
+https://meet.google.com/abc-defg-hij
+```
+
+### URL Validation
+
+The system validates Google Meet URLs:
+
+```typescript
+isValidMeetUrl(url: string): boolean
+
+// Returns true for:
+// ✓ https://meet.google.com/abc-defg-hij
+// ✓ http://meet.google.com/abc-defg-hij
+
+// Returns false for:
+// ✗ https://zoom.us/j/123456789
+// ✗ https://meet.google.com/
+// ✗ Invalid URL format
+```
+
+## URL Formatting
+
+For display purposes, URLs can be shortened:
+
+```typescript
+formatMeetLink('https://meet.google.com/abc-defg-hij')
+// Returns: 'meet.google.com/abc-defg-hij'
+```
+
+This creates cleaner displays in:
+
+- Appointment confirmation emails
+- Calendar descriptions
+- Meeting reminders
+- Client dashboard
+
+## Consultation Workflow
+
+### Scheduling a Consultation
+
+<Steps>
+  <Step title="Client Books Appointment">
+    Client selects lawyer, date, time, and duration
+  </Step>
+  
+  <Step title="Payment Processing">
+    Client pays consultation fee
+  </Step>
+  
+  <Step title="Meeting Link Generation">
+    System generates Google Meet link with calendar integration
+  </Step>
+  
+  <Step title="Confirmation Sent">
+    Both parties receive:
+    - Email confirmation
+    - Calendar invite
+    - Google Meet link
+  </Step>
+</Steps>
+
+### Joining a Consultation
+
+<Steps>
+  <Step title="Notification">
+    Google Calendar sends reminder 15 minutes before meeting
+  </Step>
+  
+  <Step title="Access Link">
+    Client clicks Google Meet link from:
+    - Calendar event
+    - Confirmation email
+    - upLegal dashboard
+  </Step>
+  
+  <Step title="Join Meeting">
+    Browser/app opens Google Meet
+    - No account required for clients
+    - Automatic audio/video setup
+  </Step>
+  
+  <Step title="Consultation Begins">
+    Lawyer admits client from waiting room
+  </Step>
+</Steps>
+
+## Consultation Durations
+
+Standard consultation lengths:
+
+<CardGroup cols={3}>
+  <Card title="30 Minutes" icon="clock">
+    Quick consultations
+    Initial assessments
+  </Card>
+  
+  <Card title="60 Minutes" icon="clock">
+    Standard consultations
+    Most common duration
+  </Card>
+  
+  <Card title="90 Minutes" icon="clock">
+    Complex matters
+    In-depth discussions
+  </Card>
+</CardGroup>
+
+## Meeting Features
+
+Google Meet provides:
+
+### Core Features
+
+- **HD Video**: High-quality video streaming
+- **Screen Sharing**: Share documents and presentations
+- **Chat**: Text chat during meetings
+- **Recording**: Lawyers can record (with consent)
+- **Captions**: Automatic closed captions
+- **Mobile Apps**: iOS and Android support
+
+### Security Features
+
+- **Encrypted Connections**: End-to-end encryption
+- **Waiting Room**: Lawyer controls meeting access
+- **Meeting Codes**: Unique codes prevent unauthorized access
+- **Time-Limited Links**: Links expire after consultation time
+
+<Note>
+Lawyers should inform clients before recording consultations and obtain consent as required by Chilean privacy laws.
+</Note>
+
+## Client Requirements
+
+To join a video consultation:
+
+### Technical Requirements
+
+- **Browser**: Chrome, Firefox, Safari, or Edge (latest version)
+- **Mobile**: Google Meet app (iOS/Android)
+- **Internet**: Stable connection (minimum 2 Mbps)
+- **Hardware**: Webcam and microphone
+
+### No Account Required
+
+Clients can join without a Google account:
+
+1. Click meeting link
+2. Enter name when prompted
+3. Allow camera and microphone access
+4. Click "Ask to join"
+5. Wait for lawyer to admit
+
+## Lawyer Best Practices
+
+### Before the Consultation
+
+<Steps>
+  <Step title="Test Equipment">
+    Verify camera, microphone, and internet connection
+  </Step>
+  
+  <Step title="Prepare Environment">
+    Ensure quiet, professional background
+  </Step>
+  
+  <Step title="Review Case">
+    Check client information and consultation notes
+  </Step>
+  
+  <Step title="Join Early">
+    Enter meeting 5 minutes before scheduled time
+  </Step>
+</Steps>
+
+### During the Consultation
+
+- Enable screen sharing for document review
+- Use chat for sharing links or references
+- Take notes in a separate application
+- Ask for consent before recording
+
+### After the Consultation
+
+- Send follow-up summary via messaging
+- Share any promised documents
+- Update consultation status in dashboard
+- Request client review/rating
+
+## Troubleshooting
+
+<Accordion title="Client can't access the meeting link">
+1. Verify the link was copied completely
+2. Try opening in a different browser
+3. Check if Google Meet is blocked by firewall
+4. Use mobile app as alternative
+5. Generate new meeting link if necessary
+</Accordion>
+
+<Accordion title="Audio or video issues">
+1. Check browser permissions for camera/microphone
+2. Close other applications using camera/microphone
+3. Restart browser
+4. Test with Google Meet's hardware test: https://meet.google.com/test
+5. Use phone dial-in as audio fallback
+</Accordion>
+
+<Accordion title="Poor video quality">
+1. Check internet connection speed
+2. Close other bandwidth-intensive applications
+3. Turn off video if necessary
+4. Move closer to WiFi router
+5. Use wired connection instead of WiFi
+</Accordion>
+
+<Accordion title="Meeting link not working">
+1. Verify the meeting is scheduled for the correct time
+2. Check if meeting link has expired
+3. Ensure using the complete URL
+4. Try accessing from calendar invitation
+5. Contact support for new meeting link
+</Accordion>
+
+## FAQ
+
+<Accordion title="Do I need a Google account to join a consultation?">
+No! Clients can join Google Meet consultations without a Google account. Simply click the meeting link, enter your name, and wait for the lawyer to admit you to the meeting.
+</Accordion>
+
+<Accordion title="Can consultations be recorded?">
+Yes, lawyers can record consultations, but they must inform clients and obtain consent before recording. Recordings are subject to Chilean privacy and data protection laws.
+</Accordion>
+
+<Accordion title="What happens if I'm late to my consultation?">
+You can still join the meeting as long as it's within your scheduled time slot. However, the consultation will end at the originally scheduled end time. We recommend joining 2-3 minutes early.
+</Accordion>
+
+<Accordion title="Can I use my phone for video consultations?">
+Absolutely! Download the Google Meet app from the App Store (iOS) or Play Store (Android). The meeting link will automatically open in the app when clicked from your phone.
+</Accordion>

@@ -1,122 +1,108 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "upLegal",
+  "theme": "linden",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#1e40af",
+    "light": "#3b82f6",
+    "dark": "#1e3a8a"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/gigfmedia/upLegal"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/gigfmedia/upLegal"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Platform",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Overview",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "getting-started"
             ]
           },
           {
-            "group": "Customization",
+            "group": "For Clients",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "clients/finding-lawyers",
+              "clients/booking-consultations",
+              "clients/payments",
+              "clients/messaging",
+              "clients/reviews"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "For Lawyers",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "lawyers/onboarding",
+              "lawyers/profile-setup",
+              "lawyers/availability",
+              "lawyers/managing-appointments",
+              "lawyers/earnings-payouts",
+              "lawyers/verification"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Features",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "features/search-filters",
+              "features/real-time-messaging",
+              "features/video-consultations",
+              "features/notifications",
+              "features/ratings-reviews"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "Technical",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Architecture",
             "pages": [
-              "api-reference/introduction"
+              "technical/architecture",
+              "technical/tech-stack",
+              "technical/database-schema"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Development",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "technical/local-setup",
+              "technical/environment-variables",
+              "technical/deployment"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/supabase",
+              "integrations/mercadopago",
+              "integrations/google-meet",
+              "integrations/resend-email"
+            ]
+          },
+          {
+            "group": "API Reference",
+            "pages": [
+              "api/authentication",
+              "api/profiles",
+              "api/appointments",
+              "api/payments",
+              "api/messages"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

@@ -1,0 +1,213 @@
+---
+title: Local Development Setup
+description: Set up upLegal for local development
+---
+
+## Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+- **Node.js** (v18.0.0 or higher)
+- **npm** (comes with Node.js)
+- **Git**
+
+We recommend using [nvm](https://github.com/nvm-sh/nvm#installing-and-updating) to manage Node.js versions.
+
+## Technology Stack
+
+upLegal is built with:
+
+- **Vite** - Build tool and dev server
+- **TypeScript** - Type-safe JavaScript
+- **React** - UI framework
+- **shadcn-ui** - Component library
+- **Tailwind CSS** - Utility-first CSS framework
+- **Express** - Backend server
+- **Supabase** - Database and authentication
+- **MercadoPago** - Payment processing
+
+## Installation
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone <YOUR_GIT_URL>
+    cd <YOUR_PROJECT_NAME>
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    <CodeGroup>
+      ```bash npm
+      npm install
+      ```
+
+      ```bash yarn
+      yarn install
+      ```
+
+      ```bash pnpm
+      pnpm install
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Configure environment variables">
+    Create a `.env.local` file in the root directory and configure the required environment variables.
+    
+    See [Environment Variables](/technical/environment-variables) for the complete list.
+  </Step>
+
+  <Step title="Start the development server">
+    <CodeGroup>
+      ```bash npm
+      npm run dev
+      ```
+
+      ```bash yarn
+      yarn dev
+      ```
+
+      ```bash pnpm
+      pnpm dev
+      ```
+    </CodeGroup>
+
+    The application will be available at `http://localhost:3001`
+  </Step>
+</Steps>
+
+## Development Scripts
+
+The following npm scripts are available:
+
+| Script | Command | Description |
+|--------|---------|-------------|
+| `dev` | `npm run dev` | Start Vite development server on port 3001 |
+| `build` | `npm run build` | Build for production |
+| `build:dev` | `npm run build:dev` | Build in development mode (with sourcemaps) |
+| `lint` | `npm run lint` | Run ESLint to check code quality |
+| `preview` | `npm run preview` | Preview production build locally on port 8080 |
+| `server` | `npm run server` | Run the Express backend server (port 3000) |
+| `start` | `npm run start` | Run both backend server and Vite concurrently |
+
+## Development Workflow
+
+### Running Frontend Only
+
+For frontend-only development:
+
+```bash
+npm run dev
+```
+
+This starts the Vite dev server with:
+- Hot Module Replacement (HMR)
+- Port: 3001
+- API proxy configured to `localhost:3000`
+
+### Running Full Stack
+
+To run both frontend and backend:
+
+```bash
+npm start
+```
+
+This concurrently runs:
+- Express backend server on port 3000
+- Vite frontend on port 3001
+
+### Backend Server Only
+
+To run just the backend:
+
+```bash
+npm run server
+```
+
+## Development Environment
+
+### Vite Configuration
+
+The Vite dev server is configured with:
+
+- **Host**: `::` (listens on all interfaces)
+- **Port**: 3001
+- **HMR Port**: 3002
+- **API Proxy**: `/api` routes proxied to `http://localhost:3000`
+- **Allowed Hosts**: Includes ngrok domains for webhook testing
+
+### Hot Module Replacement
+
+Vite provides instant HMR for:
+- React components
+- CSS/Tailwind changes
+- TypeScript modules
+
+### Path Aliases
+
+The `@` alias is configured to reference the `src` directory:
+
+```typescript
+import { Button } from '@/components/ui/button';
+```
+
+## Alternative Development Options
+
+### GitHub Codespaces
+
+<Steps>
+  <Step title="Navigate to your repository">
+    Go to the main page of your GitHub repository.
+  </Step>
+
+  <Step title="Open Codespaces">
+    Click the "Code" button (green) near the top right.
+  </Step>
+
+  <Step title="Create new Codespace">
+    Select the "Codespaces" tab and click "New codespace".
+  </Step>
+
+  <Step title="Start developing">
+    Edit files directly in the browser-based VS Code environment.
+  </Step>
+</Steps>
+
+### Direct GitHub Editing
+
+For quick fixes:
+
+1. Navigate to the desired file in GitHub
+2. Click the "Edit" button (pencil icon)
+3. Make changes and commit directly
+
+## Troubleshooting
+
+### Port Already in Use
+
+If port 3001 is already in use:
+
+```bash
+# Find and kill the process using port 3001
+lsof -ti:3001 | xargs kill -9
+```
+
+### Module Resolution Issues
+
+Clear node_modules and reinstall:
+
+```bash
+rm -rf node_modules package-lock.json
+npm install
+```
+
+### Environment Variables Not Loading
+
+Ensure your `.env.local` file is in the project root and variables are prefixed with `VITE_` for frontend access.
+
+## Next Steps
+
+- [Configure Environment Variables](/technical/environment-variables)
+- [Deploy to Production](/technical/deployment)

@@ -1,0 +1,400 @@
+---
+title: 'MercadoPago Integration'
+description: 'Payment processing and webhook handling with MercadoPago for legal consultations'
+---
+
+# MercadoPago Integration
+
+upLegal integrates MercadoPago for payment processing in Chile. This guide covers client-side initialization, preference creation, webhook handling, and OAuth account connection.
+
+## Setup
+
+### Environment Variables
+
+```bash
+# Client-side
+VITE_MERCADOPAGO_PUBLIC_KEY=your_public_key
+VITE_MERCADOPAGO_ACCESS_TOKEN=your_access_token
+VITE_MERCADOPAGO_ENV=production
+VITE_MERCADOPAGO_WEBHOOK_URL=https://your-api.com/api/mercadopago/webhook
+
+# Server-side (OAuth)
+VITE_MERCADOPAGO_CLIENT_ID=your_client_id
+VITE_MERCADOPAGO_CLIENT_SECRET=your_client_secret
+```
+
+<Warning>
+  Always use production credentials in production. The integration validates against test credentials to prevent accidental sandbox usage.
+</Warning>
+
+## Client-Side Integration
+
+### SDK Initialization
+
+Initialize the MercadoPago SDK with PKCE for security:
+
+```typescript
+// src/lib/mercadoPagoInit.ts
+import { MercadoPagoConfig } from 'mercadopago';
+
+export function initializeMercadoPago() {
+  const publicKey = import.meta.env.VITE_MERCADOPAGO_PUBLIC_KEY;
+  const isProduction = import.meta.env.VITE_MERCADOPAGO_ENV === 'production';
+  
+  if (!publicKey) {
+    console.error('MercadoPago public key is not defined');
+    return null;
+  }
+  
+  try {
+    const mp = new window.MercadoPago(publicKey, {
+      locale: 'es-CL',
+      advancedFraudPrevention: true,
+      environment: 'production',
+    });
+    
+    // Debug info for troubleshooting
+    (window as any).__mp = {
+      env: 'production',
+      publicKey: publicKey.substring(0, 10) + '...',
+      timestamp: new Date().toISOString(),
+      version: window.MercadoPago?.VERSION || 'unknown',
+      isProduction: true,
+    };
+    
+    return mp;
+  } catch (error) {
+    console.error('Failed to initialize MercadoPago:', error);
+    return null;
+  }
+}
+```
+
+### Creating Payment Preferences
+
+Create a checkout preference with proper configuration:
+
+```typescript
+// src/lib/mercadopago.ts
+import { MercadoPagoConfig, Preference } from 'mercadopago';
+
+const accessToken = import.meta.env.VITE_MERCADOPAGO_ACCESS_TOKEN;
+
+// Validate credentials
+if (accessToken?.startsWith('TEST-')) {
+  throw new Error('Sandbox credentials detected in production mode!');
+}
+
+export const mercadopago = new MercadoPagoConfig({
+  accessToken,
+  options: {
+    timeout: 5000,
+    environment: 'production',
+  },
+});
+
+export const createPreference = async (items, payer) => {
+  const preference = new Preference(mercadopago);
+  const baseSiteUrl = import.meta.env.VITE_APP_URL || 'https://legalup.cl';
+  
+  const preferenceData = {
+    binary_mode: true,
+    auto_return: 'approved',
+    items: items.map(item => ({
+      id: item.id || Math.random().toString(36).substring(2, 9),
+      title: item.title,
+      description: item.description || '',
+      quantity: item.quantity,
+      currency_id: item.currency_id,
+      unit_price: item.unit_price,
+    })),
+    payer: {
+      email: payer.email,
+      name: payer.name,
+    },
+    back_urls: {
+      success: `${baseSiteUrl}/payment/success`,
+      failure: `${baseSiteUrl}/payment/failure`,
+      pending: `${baseSiteUrl}/payment/pending`,
+    },
+    notification_url: import.meta.env.VITE_MERCADOPAGO_WEBHOOK_URL,
+    external_reference: `uplegal-${Date.now()}`,
+    statement_descriptor: 'UPLEGAL',
+  };
+  
+  const result = await preference.create({ body: preferenceData });
+  
+  if (result.id) {
+    const timestamp = Date.now();
+    return `https://www.mercadopago.cl/checkout/v1/redirect?pref_id=${result.id}&ts=${timestamp}`;
+  }
+  
+  throw new Error('Failed to create payment URL');
+};
+```
+
+## Server-Side Integration
+
+### Booking Payment Creation
+
+Create a payment for a legal consultation booking:
+
+```javascript
+// server.mjs
+app.post('/api/bookings/create', async (req, res) => {
+  const { lawyer_id, user_email, user_name, scheduled_date, scheduled_time, duration, price } = req.body;
+  
+  // Create booking record
+  const { data: booking } = await supabase
+    .from('bookings')
+    .insert({
+      lawyer_id,
+      user_email,
+      user_name,
+      scheduled_date,
+      scheduled_time,
+      duration,
+      price,
+      status: 'pending',
+    })
+    .select()
+    .single();
+  
+  // Create MercadoPago preference
+  const preferenceData = {
+    items: [{
+      id: booking.id,
+      title: `Asesoría Legal - ${duration} minutos`,
+      quantity: 1,
+      unit_price: price,
+    }],
+    payer: {
+      name: user_name,
+      email: user_email,
+    },
+    back_urls: {
+      success: `${appUrl}/booking/success?booking_id=${booking.id}`,
+      failure: `${appUrl}/booking/failure?booking_id=${booking.id}`,
+      pending: `${appUrl}/booking/pending?booking_id=${booking.id}`,
+    },
+    auto_return: 'approved',
+    external_reference: booking.id,
+    notification_url: process.env.VITE_MERCADOPAGO_WEBHOOK_URL,
+    statement_descriptor: 'LEGALUP',
+  };
+  
+  const mpResponse = await fetch('https://api.mercadopago.com/checkout/preferences', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.VITE_MERCADOPAGO_ACCESS_TOKEN}`,
+    },
+    body: JSON.stringify(preferenceData),
+  });
+  
+  const mpData = await mpResponse.json();
+  
+  // Save preference ID
+  await supabase
+    .from('bookings')
+    .update({ mercadopago_preference_id: mpData.id })
+    .eq('id', booking.id);
+  
+  res.json({
+    success: true,
+    booking_id: booking.id,
+    payment_link: mpData.init_point,
+  });
+});
+```
+
+## Webhook Handling
+
+### Payment Notification Processing
+
+Handle payment notifications and update booking status:
+
+```javascript
+app.post('/api/mercadopago/webhook', async (req, res) => {
+  const { type, data } = req.body;
+  const topic = req.body.topic || type;
+  const id = req.body.id || data?.id;
+  
+  if (topic === 'payment') {
+    const payment = await new Payment(mpClient).get({ id });
+    
+    if (payment.status === 'approved') {
+      const bookingId = payment.external_reference;
+      
+      // 1. Update booking status
+      const { data: booking } = await supabase
+        .from('bookings')
+        .update({ 
+          status: 'confirmed',
+          payment_id: payment.id.toString(),
+        })
+        .eq('id', bookingId)
+        .select()
+        .single();
+      
+      // 2. Create or get user
+      const userEmail = booking.user_email.trim().toLowerCase();
+      let userId = null;
+      
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', userEmail)
+        .maybeSingle();
+      
+      if (existingProfile) {
+        userId = existingProfile.id;
+      } else {
+        const tempPassword = crypto.randomBytes(9).toString('hex');
+        const { data: newUser } = await supabase.auth.admin.createUser({
+          email: userEmail,
+          password: tempPassword,
+          email_confirm: true,
+          user_metadata: {
+            first_name: booking.user_name,
+            role: 'client',
+            signup_method: 'booking',
+          },
+        });
+        userId = newUser.user.id;
+      }
+      
+      // 3. Create appointment
+      await supabase
+        .from('appointments')
+        .insert({
+          lawyer_id: booking.lawyer_id,
+          user_id: userId,
+          email: userEmail,
+          name: booking.user_name,
+          appointment_date: booking.scheduled_date,
+          appointment_time: booking.scheduled_time,
+          duration: booking.duration,
+          price: booking.price,
+          status: 'confirmed',
+        });
+      
+      // 4. Send confirmation emails
+      const { data: linkData } = await supabase.auth.admin.generateLink({
+        type: 'magiclink',
+        email: userEmail,
+        options: { redirectTo: `${appUrl}/dashboard/appointments` },
+      });
+      
+      await resend.emails.send({
+        from: 'LegalUp <hola@mg.legalup.cl>',
+        to: userEmail,
+        subject: '¡Tu asesoría está confirmada!',
+        html: `
+          <h1>¡Reserva Confirmada!</h1>
+          <p>Tu asesoría ha sido confirmada exitosamente.</p>
+          <a href="${linkData.properties.action_link}">Ingresar a mi cuenta</a>
+        `,
+      });
+    }
+  }
+  
+  res.status(200).send('OK');
+});
+```
+
+## OAuth Integration
+
+### Lawyer Account Connection
+
+Allow lawyers to connect their MercadoPago accounts:
+
+```javascript
+// Generate auth URL with PKCE
+app.get('/api/mercadopago/auth-url', async (req, res) => {
+  const verifier = generateCodeVerifier();
+  const challenge = generateCodeChallenge(verifier);
+  const state = crypto.randomUUID();
+  
+  // Store verifier in database
+  await supabase
+    .from('auth_states')
+    .insert({ state, code_verifier: verifier });
+  
+  const redirectUri = `${backendUrl}/api/mercadopago/oauth/callback`;
+  const authUrl = new URL('https://auth.mercadopago.com/authorization');
+  authUrl.searchParams.append('client_id', process.env.VITE_MERCADOPAGO_CLIENT_ID);
+  authUrl.searchParams.append('response_type', 'code');
+  authUrl.searchParams.append('state', state);
+  authUrl.searchParams.append('redirect_uri', redirectUri);
+  authUrl.searchParams.append('code_challenge', challenge);
+  authUrl.searchParams.append('code_challenge_method', 'S256');
+  
+  res.json({ url: authUrl.toString() });
+});
+
+// Handle OAuth callback
+app.get('/api/mercadopago/oauth/callback', async (req, res) => {
+  const { code, state } = req.query;
+  
+  // Retrieve verifier from database
+  const { data: authState } = await supabase
+    .from('auth_states')
+    .select('code_verifier')
+    .eq('state', state)
+    .single();
+  
+  // Exchange code for token
+  const tokenResponse = await fetch('https://api.mercadopago.com/oauth/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'authorization_code',
+      client_id: process.env.VITE_MERCADOPAGO_CLIENT_ID,
+      client_secret: process.env.VITE_MERCADOPAGO_CLIENT_SECRET,
+      code,
+      redirect_uri: redirectUri,
+      code_verifier: authState.code_verifier,
+    }),
+  });
+  
+  const tokenData = await tokenResponse.json();
+  
+  // Save to database
+  await supabase
+    .from('mercadopago_accounts')
+    .upsert({
+      user_id: lawyerId,
+      mercadopago_user_id: tokenData.user_id,
+      access_token: tokenData.access_token,
+      refresh_token: tokenData.refresh_token,
+    });
+  
+  res.redirect(`${appUrl}/lawyer/earnings?mp_success=true`);
+});
+```
+
+## Best Practices
+
+<Check>
+  - Always validate credentials aren't test tokens in production
+  - Use webhooks for payment confirmation, not redirect URLs
+  - Implement idempotency for webhook processing
+  - Store external_reference for tracking
+  - Use PKCE flow for OAuth security
+  - Handle webhook retries gracefully
+</Check>
+
+## Currency Formatting
+
+Format Chilean Peso amounts:
+
+```typescript
+export const formatCLP = (amount: number): string => {
+  return new Intl.NumberFormat('es-CL', {
+    style: 'currency',
+    currency: 'CLP',
+    minimumFractionDigits: 0,
+  }).format(amount);
+};
+```
