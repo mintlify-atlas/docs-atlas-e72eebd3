@@ -1,0 +1,119 @@
+{
+  "projectType": "saas",
+  "projectName": "upLegal",
+  "projectDescription": "A legal services marketplace connecting clients with verified lawyers in Chile for consultations, appointments, and legal assistance.",
+  "theme": "linden",
+  "primaryColor": "#1e40af",
+  "lightColor": "#3b82f6",
+  "darkColor": "#1e3a8a",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Platform",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "introduction",
+              "getting-started"
+            ]
+          },
+          {
+            "group": "For Clients",
+            "pages": [
+              "clients/finding-lawyers",
+              "clients/booking-consultations",
+              "clients/payments",
+              "clients/messaging",
+              "clients/reviews"
+            ]
+          },
+          {
+            "group": "For Lawyers",
+            "pages": [
+              "lawyers/onboarding",
+              "lawyers/profile-setup",
+              "lawyers/availability",
+              "lawyers/managing-appointments",
+              "lawyers/earnings-payouts",
+              "lawyers/verification"
+            ]
+          },
+          {
+            "group": "Features",
+            "pages": [
+              "features/search-filters",
+              "features/real-time-messaging",
+              "features/video-consultations",
+              "features/notifications",
+              "features/ratings-reviews"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Technical",
+        "groups": [
+          {
+            "group": "Architecture",
+            "pages": [
+              "technical/architecture",
+              "technical/tech-stack",
+              "technical/database-schema"
+            ]
+          },
+          {
+            "group": "Development",
+            "pages": [
+              "technical/local-setup",
+              "technical/environment-variables",
+              "technical/deployment"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/supabase",
+              "integrations/mercadopago",
+              "integrations/google-meet",
+              "integrations/resend-email"
+            ]
+          },
+          {
+            "group": "API Reference",
+            "pages": [
+              "api/authentication",
+              "api/profiles",
+              "api/appointments",
+              "api/payments",
+              "api/messages"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Lawyer search and filtering by specialty and location",
+    "Real-time appointment booking with availability management",
+    "Integrated payment processing via MercadoPago",
+    "Real-time messaging system between clients and lawyers",
+    "Video consultation integration with Google Meet",
+    "Lawyer verification system with PJUD integration",
+    "Rating and review system",
+    "Admin dashboard for platform management",
+    "Email notifications via Resend",
+    "Earnings and payout management for lawyers"
+  ],
+  "publicApiSurface": [
+    "User authentication and profile management",
+    "Lawyer search and filtering endpoints",
+    "Appointment booking and scheduling",
+    "Payment processing and webhooks",
+    "Messaging API",
+    "Notification system",
+    "File upload for avatars and documents",
+    "Rating and review submission",
+    "Admin analytics and management APIs"
+  ]
+}
